@@ -1,13 +1,10 @@
 import { apiClient, getApiErrorMessage } from "../../../lib/api-client";
 import { adminEndpoints } from "./endpoints";
 import type {
-  ActivityItem,
   AdminDashboardResponse,
   AnalyticsOverview,
-  AppointmentSummaryItem,
   ConsultationReport,
   ConsultationStats,
-  DashboardStats,
   DirectoryRecord,
   FeedbackSummary,
   HospitalRecord,
@@ -15,7 +12,6 @@ import type {
   MidwifeReviewAction,
   MidwifeReviewResponse,
   PaginatedResponse,
-  ServiceUsageItem,
   TableRecord,
 } from "./types";
 
@@ -28,13 +24,6 @@ async function get<T>(url: string, fallback: string): Promise<T> {
   }
 }
 
-export function getDashboardStats() {
-  return get<DashboardStats>(
-    adminEndpoints.dashboard.stats,
-    "Unable to load dashboard stats.",
-  );
-}
-
 /** Fetches the real aggregate payload used by the administrator home screen. */
 export function getAdminDashboard() {
   return get<AdminDashboardResponse>(
@@ -43,12 +32,24 @@ export function getAdminDashboard() {
   );
 }
 
+/** Reads Django pagination metadata for the live hospitals total card. */
+export async function getHospitalCount() {
+  try {
+    const response = await apiClient.get<{ count: number }>(adminEndpoints.hospitalsDirectory);
+    return response.data.count;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, "Unable to load the hospital count."));
+  }
+}
+
 /** Lists pending applications by default; pass a status to inspect another queue. */
 export function getMidwifeApplications(status?: string) {
   const params = status ? { status } : undefined;
   return apiClient
-    .get<PaginatedResponse<MidwifeApplication>>(adminEndpoints.midwifeApplications, { params })
-    .then((response) => response.data)
+    // Django's page-number paginator returns { count, results }, while the UI
+    // consistently consumes { total, data }.
+    .get<{ count: number; results: MidwifeApplication[] }>(adminEndpoints.midwifeApplications, { params })
+    .then((response) => ({ total: response.data.count, data: response.data.results }))
     .catch((error: unknown) => {
       throw new Error(getApiErrorMessage(error, "Unable to load midwife applications."));
     });
@@ -69,27 +70,6 @@ export async function reviewMidwifeApplication(
   } catch (error) {
     throw new Error(getApiErrorMessage(error, "Unable to update the midwife application."));
   }
-}
-
-export function getAppointmentsSummary() {
-  return get<AppointmentSummaryItem[]>(
-    adminEndpoints.dashboard.appointmentsSummary,
-    "Unable to load appointment summary.",
-  );
-}
-
-export function getServiceUsage() {
-  return get<ServiceUsageItem[]>(
-    adminEndpoints.dashboard.serviceUsage,
-    "Unable to load service usage.",
-  );
-}
-
-export function getRecentActivity() {
-  return get<ActivityItem[]>(
-    adminEndpoints.dashboard.recentActivity,
-    "Unable to load recent activity.",
-  );
 }
 
 export function getUsers() {

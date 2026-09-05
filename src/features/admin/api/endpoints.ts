@@ -18,6 +18,8 @@ export const adminEndpoints = {
     `/midwives/applications/${id}/review/`,
   // Admin drill-down data for the selected midwife.
   midwifeStats: (id: string) => `/admin/midwives/${id}/stats/`,
+  // Public/readable directory endpoint used for the hospital total card.
+  hospitalsDirectory: "/midwives/hospitals/",
   users: "/users",
   midwives: "/midwives",
   hospitals: "/hospitals",

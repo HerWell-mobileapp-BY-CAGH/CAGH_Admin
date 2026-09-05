@@ -8,26 +8,28 @@ import { useMemo, useState, type ReactNode } from "react";
 import logo from "../assets/logo.jpg";
 import {
   getAnalytics,
+  getAdminDashboard,
   getAppointments,
-  getAppointmentsSummary,
   getConsultationReport,
   getConsultationStats,
   getConsultations,
-  getDashboardStats,
   getEmergencyContacts,
   getFeedback,
   getFeedbackSummary,
   getHealthContent,
+  getHospitalCount,
   getHospitals,
+  getMidwifeApplications,
   getMidwives,
-  getRecentActivity,
-  getServiceUsage,
+  reviewMidwifeApplication,
   getServices,
   getUsers,
 } from "../features/admin/api/admin-api";
 import type {
   DirectoryRecord,
   HospitalRecord,
+  MidwifeApplication,
+  MidwifeReviewAction,
   PaginatedResponse,
   TableRecord,
 } from "../features/admin/api/types";
@@ -368,32 +370,6 @@ function AppointmentsSummaryPanel({
   );
 }
 
-function ServiceUsagePanel({
-  items,
-}: {
-  items: Array<{ name: string; percentage: string; barClass: string }>;
-}) {
-  return (
-    <div className="panel service">
-      <div className="panel-header">
-        <h2>Service Usage</h2>
-        <span className="month">This Month</span>
-      </div>
-      {items.map((item) => (
-        <div className="usage" key={item.name}>
-          <div>
-            <b>{item.name}</b>
-            <span>{item.percentage}</span>
-          </div>
-          <div className="track">
-            <i className={item.barClass} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function ActivityPanel({
   items,
 }: {
@@ -425,53 +401,51 @@ function ActivityPanel({
 }
 
 function Dashboard() {
-  const statsQuery = useAsyncData(getDashboardStats, []);
-  const appointmentsQuery = useAsyncData(getAppointmentsSummary, []);
-  const serviceUsageQuery = useAsyncData(getServiceUsage, []);
-  const activityQuery = useAsyncData(getRecentActivity, []);
+  // One authoritative request supplies the live dashboard totals, statuses,
+  // and audited activity feed from GET /api/v1/admin/dashboard/.
+  const dashboardQuery = useAsyncData(getAdminDashboard, []);
+  // Hospital counts live in the directory endpoint, not the aggregate payload.
+  const hospitalCountQuery = useAsyncData(getHospitalCount, []);
 
-  if (
-    statsQuery.loading ||
-    appointmentsQuery.loading ||
-    serviceUsageQuery.loading ||
-    activityQuery.loading
-  ) {
+  if (dashboardQuery.loading || hospitalCountQuery.loading) {
     return <LoadingState label="Loading dashboard..." />;
   }
 
-  if (
-    statsQuery.error ||
-    appointmentsQuery.error ||
-    serviceUsageQuery.error ||
-    activityQuery.error
-  ) {
-    return (
-      <ErrorState
-        message={
-          statsQuery.error ??
-          appointmentsQuery.error ??
-          serviceUsageQuery.error ??
-          activityQuery.error ??
-          "Unable to load dashboard."
-        }
-      />
-    );
+  if (dashboardQuery.error || hospitalCountQuery.error || !dashboardQuery.data) {
+    return <ErrorState message={dashboardQuery.error ?? hospitalCountQuery.error ?? "Unable to load dashboard."} />;
   }
 
-  const stats = statsQuery.data!;
-  const appointments = appointmentsQuery.data ?? [];
-  const serviceUsage = serviceUsageQuery.data ?? [];
-  const activity = activityQuery.data ?? [];
+  const dashboard = dashboardQuery.data;
+  const appointments: Array<{
+    label: string;
+    description: string;
+    count: number;
+    kind: "complete" | "booked" | "cancelled";
+  }> = [
+    { label: "Completed", description: "Successfully attended", count: dashboard.appointments_by_status.COMPLETED ?? 0, kind: "complete" },
+    { label: "Booked", description: "Upcoming sessions", count: (dashboard.appointments_by_status.CONFIRMED ?? 0) + (dashboard.appointments_by_status.PENDING ?? 0), kind: "booked" },
+    { label: "Cancelled", description: "Patient or provider cancelled", count: dashboard.appointments_by_status.CANCELLED ?? 0, kind: "cancelled" },
+  ];
+  const activity = dashboard.recent_activities.map((item) => ({
+    title: item.action.replaceAll("_", " "),
+    description: item.performed_by ?? "System activity",
+    time: new Date(item.timestamp).toLocaleString(),
+    tag: "green",
+  }));
+  const stats = {
+    totalUsers: dashboard.totals.users,
+    totalMidwives: dashboard.totals.midwives,
+    midwivesPending: (dashboard.midwives_by_verification_status.PENDING ?? 0) + (dashboard.midwives_by_verification_status.UNDER_REVIEW ?? 0),
+    hospitals: hospitalCountQuery.data ?? 0,
+    consultations: dashboard.totals.consultations,
+  };
   return (
     <>
       <PageHeader
         title="Dashboard"
         subtitle="Welcome back, Administrator. Here's what's happening on Emma today."
         actions={
-          <>
-            <button className="primary">+ Add Record</button>
-            <button className="outline">Export Data</button>
-          </>
+          <button className="outline">Export Data</button>
         }
       />
       <StatsGrid stats={stats} />
@@ -480,7 +454,6 @@ function Dashboard() {
         <AppointmentsSummaryPanel appointments={appointments} />
       </section>
       <section className="bottom-grid">
-        <ServiceUsagePanel items={serviceUsage} />
         <ActivityPanel items={activity} />
       </section>
     </>
@@ -902,11 +875,11 @@ function SettingsView({
   onAdministration: () => void;
   user: AdminUser;
 }) {
+  const [language, setLanguage] = useState("english");
   const items = [
     ["Profile", "Update your name, email and profile picture"],
     ["Administration", "Manage Administration preferences"],
     ["Password", "Change your administrator password"],
-    ["Language", "English / Amharic"],
   ];
   return (
     <>
@@ -947,14 +920,35 @@ function SettingsView({
             <ChevronRight />
           </button>
           <h2 className="section-label">PREFERENCES</h2>
-          <button className="setting-item">
+          <fieldset className="setting-item language-setting">
             <span className="setting-icon">◎</span>
             <span>
               <b>Language</b>
-              <small>English / Amharic</small>
+              <small>Choose your preferred language</small>
+              <span className="language-options">
+                <label>
+                  <input
+                    type="radio"
+                    name="language"
+                    value="english"
+                    checked={language === "english"}
+                    onChange={(event) => setLanguage(event.target.value)}
+                  />
+                  English
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="language"
+                    value="amharic"
+                    checked={language === "amharic"}
+                    onChange={(event) => setLanguage(event.target.value)}
+                  />
+                  Amharic
+                </label>
+              </span>
             </span>
-            <ChevronRight />
-          </button>
+          </fieldset>
           <button className="logout settings-logout">
             <LogOut />
             Log Out
@@ -1201,6 +1195,80 @@ function AnalyticsView() {
     </>
   );
 }
+
+/**
+ * Admin-only review queue backed by the real midwife application endpoints.
+ * Approval is immediate; rejecting and suspending prompt for the reason that
+ * Django requires for those two review actions.
+ */
+function MidwivesView() {
+  const applicationsQuery = useAsyncData(getMidwifeApplications, []);
+  const [applications, setApplications] = useState<MidwifeApplication[] | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  // Copy fetched items into local state only once so a completed review can
+  // remove its application from the default pending/under-review queue.
+  const displayedApplications = applications ?? (applicationsQuery.data?.data ?? []);
+
+  async function handleReview(application: MidwifeApplication, action: MidwifeReviewAction) {
+    const reason = action === "APPROVE" ? undefined : window.prompt(`Reason for ${action.toLowerCase()}ing this midwife:`)?.trim();
+    if (action !== "APPROVE" && !reason) return;
+
+    setPendingId(application.id);
+    setMessage(null);
+    try {
+      const result = await reviewMidwifeApplication(application.id, action, reason);
+      // Reviewed records no longer belong in the default pending queue.
+      setApplications(displayedApplications.filter((item) => item.id !== application.id));
+      setMessage(result.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to review this application.");
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  if (applicationsQuery.loading) return <LoadingState label="Loading midwife applications..." />;
+  if (applicationsQuery.error) return <ErrorState message={applicationsQuery.error} />;
+
+  return (
+    <>
+      <PageHeader title="Midwife Applications" subtitle="Review submitted professional credentials and account status." />
+      {message ? <p className="loading-state" role="status">{message}</p> : null}
+      <div className="panel data-panel">
+        <div className="panel-header"><h2>Pending Review</h2></div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Midwife</th><th>License</th><th>Specialty</th><th>Hospital</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {displayedApplications.map((application) => {
+                const disabled = pendingId === application.id;
+                return (
+                  <tr key={application.id}>
+                    <td><b>{application.user.username || application.user.email}</b><small>{application.user.email}</small></td>
+                    <td>{application.license_number}</td>
+                    <td>{application.specialty || "—"}</td>
+                    <td>{application.hospital?.name ?? "—"}</td>
+                    <td><span className={`status ${application.verification_status.toLowerCase()}`}>{application.verification_status}</span></td>
+                    <td>
+                      {/* These buttons call POST /midwives/applications/{id}/review/. */}
+                      <button disabled={disabled} className="primary" onClick={() => handleReview(application, "APPROVE")}>Approve</button>{" "}
+                      <button disabled={disabled} onClick={() => handleReview(application, "REJECT")}>Reject</button>{" "}
+                      <button disabled={disabled} onClick={() => handleReview(application, "SUSPEND")}>Suspend</button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!displayedApplications.length ? <tr><td colSpan={6}>No applications awaiting review.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function TableView({
   type,
   onMidwife,
@@ -1410,6 +1478,8 @@ export default function AdminDashboard({
   const content =
     active === "Dashboard" ? (
       <Dashboard />
+    ) : active === "Midwives" ? (
+      <MidwivesView />
     ) : active === "Health" ? (
       <HealthView onAddContent={() => setModal("content")} />
     ) : active === "Analytics" ? (
