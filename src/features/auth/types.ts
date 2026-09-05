@@ -12,5 +12,7 @@ export type SignInCredentials = {
 };
 
 export type SignInResponse = {
-  user: AdminUser;
+  access: string;
+  refresh: string;
+  user?: Partial<AdminUser>;
 };

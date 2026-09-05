@@ -5,6 +5,35 @@
  * because navigation, filters, dialogs, and form controls all need React state.
  */
 import { useMemo, useState, type ReactNode } from "react";
+import logo from "../assets/logo.jpg";
+import {
+  getAnalytics,
+  getAppointments,
+  getAppointmentsSummary,
+  getConsultationReport,
+  getConsultationStats,
+  getConsultations,
+  getDashboardStats,
+  getEmergencyContacts,
+  getFeedback,
+  getFeedbackSummary,
+  getHealthContent,
+  getHospitals,
+  getMidwives,
+  getRecentActivity,
+  getServiceUsage,
+  getServices,
+  getUsers,
+} from "../features/admin/api/admin-api";
+import type {
+  DirectoryRecord,
+  HospitalRecord,
+  PaginatedResponse,
+  TableRecord,
+} from "../features/admin/api/types";
+import { useAsyncData } from "../features/admin/hooks/useAsyncData";
+import { useAuth } from "../features/auth/auth-context";
+import type { AdminUser } from "../features/auth/types";
 import { AdminShell } from "./layout/AdminShell";
 import { StatCard } from "./ui/stat-card";
 import {
@@ -31,10 +60,32 @@ import {
   XCircle,
 } from "lucide-react";
 
-const notice = false;
-const setNotice = (_value: boolean) => {
-  void _value;
-};
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function LoadingState({ label = "Loading..." }: { label?: string }) {
+  return <p className="loading-state">{label}</p>;
+}
+
+function ErrorState({ message }: { message: string }) {
+  return (
+    <p className="loading-state" role="alert">
+      {message}
+    </p>
+  );
+}
+
+function toTableRows(records: TableRecord[]) {
+  return records.map((record) => record.cells);
+}
+
 /** Primary navigation entries shown above the management divider. */
 const navItems = [
   { label: "Dashboard", icon: Grid2X2 },
@@ -52,26 +103,12 @@ const manageItems = [
   { label: "Analytics", icon: BarChart3 },
   { label: "Settings", icon: Settings },
 ];
-/** Demo directory rows used by the people and midwife table views. */
-const people = [
-  ["Abeba Tilahun", "USR-8492", "+251 911 234 567", "Addis Ababa", "Active"],
-  ["Kalkidan Bekele", "USR-8493", "+251 922 345 678", "Adama", "Suspended"],
-  ["Meron Alemu", "USR-8494", "+251 933 456 789", "Bahir Dar", "Active"],
-  ["Hana Tesfaye", "USR-8495", "+251 944 567 890", "Addis Ababa", "Active"],
-];
-const hospitals = [
-  ["Mercy General Hospital", "HOSP-4921", "New York, NY", "12", "Active"],
-  ["St. Jude's Women Center", "HOSP-8832", "Chicago, IL", "8", "Active"],
-  ["Cedar Ridge Maternity", "HOSP-1104", "Austin, TX", "5", "Pending"],
-  ["Oakland Community Health", "HOSP-3392", "Oakland, CA", "15", "Active"],
-];
-
 /** Brand block reused at the top of the responsive sidebar. */
 function Brand() {
   return (
     <div className="brand">
       <div className="brand-mark">
-        <Stethoscope />
+        <img src={logo} alt="Emma Healthcare logo" />
       </div>
       <div>
         <strong>Emma</strong>
@@ -144,9 +181,11 @@ function Sidebar({
 function Topbar({
   setOpen,
   onNotify,
+  user,
 }: {
   setOpen: (v: boolean) => void;
   onNotify: () => void;
+  user: AdminUser;
 }) {
   return (
     <header className="topbar">
@@ -172,212 +211,304 @@ function Topbar({
           <i />
         </button>
         <div className="admin">
-          <div className="avatar">SJ</div>
+          <div className="avatar">{getInitials(user.name)}</div>
           <div>
-            <b>Sarah Jenkins</b>
-            <small>sarah.j@emma.health</small>
+            <b>{user.name}</b>
+            <small>{user.email}</small>
           </div>
         </div>
       </div>
     </header>
   );
 }
-function Dashboard() {
+
+function PageHeader({
+  title,
+  subtitle,
+  actions,
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+}) {
   return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h1>Dashboard</h1>
-          <p>
-            Welcome back, Administrator. Here's what's happening on Emma today.
-          </p>
+    <div className="page-heading">
+      <div>
+        <h1>{title}</h1>
+        {subtitle ? <p>{subtitle}</p> : null}
+      </div>
+      {actions ? <div className="heading-actions">{actions}</div> : null}
+    </div>
+  );
+}
+
+function StatsGrid({
+  stats,
+}: {
+  stats: {
+    totalUsers: number | string;
+    totalUsersChange?: number | string;
+    totalMidwives: number | string;
+    midwivesPending?: number | string;
+    hospitals: number | string;
+    consultations: number | string;
+    consultationsChange?: number | string;
+  };
+}) {
+  return (
+    <section className="stats">
+      <StatCard
+        title="Total Users"
+        value={String(stats.totalUsers)}
+        featured
+        note={
+          stats.totalUsersChange ? (
+            <>
+              <b>↗ {stats.totalUsersChange}</b> Increased from last month
+            </>
+          ) : undefined
+        }
+      />
+      <StatCard
+        title="Total Midwives"
+        value={String(stats.totalMidwives)}
+        note={
+          stats.midwivesPending ? (
+            <em>{stats.midwivesPending} pending approval</em>
+          ) : undefined
+        }
+      />
+      <StatCard
+        title="Hospitals"
+        value={String(stats.hospitals)}
+        note={<span className="orange-dot" />}
+      />
+      <StatCard
+        title="Consultations"
+        value={String(stats.consultations)}
+        note={
+          stats.consultationsChange ? (
+            <>
+              <b className="green-text">↗ {stats.consultationsChange}</b> Since
+              last quarter
+            </>
+          ) : undefined
+        }
+      />
+    </section>
+  );
+}
+
+function GrowthChartPanel() {
+  return (
+    <div className="panel growth">
+      <div className="panel-header">
+        <h2>User Growth</h2>
+        <MoreVertical />
+      </div>
+      <div className="chart">
+        <div className="bars">
+          <i />
+          <i />
+          <i />
+          <i />
         </div>
-        <div className="heading-actions">
-          <button className="primary">+ Add Record</button>
-          <button className="outline">Export Data</button>
+        <svg viewBox="0 0 400 170" preserveAspectRatio="none">
+          <path d="M0 145 C95 135 160 110 230 75 S330 35 400 15" />
+        </svg>
+        <div className="quarters">
+          <span>Q1</span>
+          <span>Q2</span>
+          <span>Q3</span>
+          <span>Q4</span>
         </div>
       </div>
-      <section className="stats">
-        <StatCard
-          title="Total Users"
-          value="12,450"
-          featured
-          note={
-            <>
-              <b>↗ +8.2%</b> Increased from last month
-            </>
-          }
-        />
-        <StatCard
-          title="Total Midwives"
-          value="124"
-          note={<em>18 pending approval</em>}
-        />
-        <StatCard
-          title="Hospitals"
-          value="32"
-          note={<span className="orange-dot" />}
-        />
-        <StatCard
-          title="Consultations"
-          value="4,892"
-          note={
-            <>
-              <b className="green-text">↗ +12%</b> Since last quarter
-            </>
-          }
-        />
-      </section>
+    </div>
+  );
+}
+
+function AppointmentsSummaryPanel({
+  appointments,
+}: {
+  appointments: Array<{
+    label: string;
+    description: string;
+    count: number | string;
+    kind: "complete" | "booked" | "cancelled";
+  }>;
+}) {
+  const appointmentIcons = {
+    complete: Check,
+    booked: CalendarDays,
+    cancelled: XCircle,
+  } as const;
+
+  return (
+    <div className="panel appointments">
+      <div className="panel-header">
+        <h2>Appointments Summary</h2>
+        <a>View All ›</a>
+      </div>
+      {appointments.map((item) => {
+        const Icon = appointmentIcons[item.kind];
+        return (
+          <div className="appointment" key={item.label}>
+            <div className={`appointment-icon ${item.kind}`}>
+              <Icon />
+            </div>
+            <div>
+              <b>{item.label}</b>
+              <small>{item.description}</small>
+            </div>
+            <strong>{String(item.count)}</strong>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ServiceUsagePanel({
+  items,
+}: {
+  items: Array<{ name: string; percentage: string; barClass: string }>;
+}) {
+  return (
+    <div className="panel service">
+      <div className="panel-header">
+        <h2>Service Usage</h2>
+        <span className="month">This Month</span>
+      </div>
+      {items.map((item) => (
+        <div className="usage" key={item.name}>
+          <div>
+            <b>{item.name}</b>
+            <span>{item.percentage}</span>
+          </div>
+          <div className="track">
+            <i className={item.barClass} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ActivityPanel({
+  items,
+}: {
+  items: Array<{
+    title: string;
+    time: string;
+    description: string;
+    tag: string;
+  }>;
+}) {
+  return (
+    <div className="panel activity">
+      <div className="panel-header">
+        <h2>Recent Activity</h2>
+      </div>
+      {items.map((item) => (
+        <div className="activity-row" key={`${item.title}-${item.time}`}>
+          <i className={item.tag} />
+          <div>
+            <b>{item.title}</b>
+            <small>{item.description}</small>
+            <em>{item.tag}</em>
+          </div>
+          <span>{item.time}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Dashboard() {
+  const statsQuery = useAsyncData(getDashboardStats, []);
+  const appointmentsQuery = useAsyncData(getAppointmentsSummary, []);
+  const serviceUsageQuery = useAsyncData(getServiceUsage, []);
+  const activityQuery = useAsyncData(getRecentActivity, []);
+
+  if (
+    statsQuery.loading ||
+    appointmentsQuery.loading ||
+    serviceUsageQuery.loading ||
+    activityQuery.loading
+  ) {
+    return <LoadingState label="Loading dashboard..." />;
+  }
+
+  if (
+    statsQuery.error ||
+    appointmentsQuery.error ||
+    serviceUsageQuery.error ||
+    activityQuery.error
+  ) {
+    return (
+      <ErrorState
+        message={
+          statsQuery.error ??
+          appointmentsQuery.error ??
+          serviceUsageQuery.error ??
+          activityQuery.error ??
+          "Unable to load dashboard."
+        }
+      />
+    );
+  }
+
+  const stats = statsQuery.data!;
+  const appointments = appointmentsQuery.data ?? [];
+  const serviceUsage = serviceUsageQuery.data ?? [];
+  const activity = activityQuery.data ?? [];
+  return (
+    <>
+      <PageHeader
+        title="Dashboard"
+        subtitle="Welcome back, Administrator. Here's what's happening on Emma today."
+        actions={
+          <>
+            <button className="primary">+ Add Record</button>
+            <button className="outline">Export Data</button>
+          </>
+        }
+      />
+      <StatsGrid stats={stats} />
       <section className="dashboard-grid">
-        <div className="panel growth">
-          <div className="panel-header">
-            <h2>User Growth</h2>
-            <MoreVertical />
-          </div>
-          <div className="chart">
-            <div className="bars">
-              <i />
-              <i />
-              <i />
-              <i />
-            </div>
-            <svg viewBox="0 0 400 170" preserveAspectRatio="none">
-              <path d="M0 145 C95 135 160 110 230 75 S330 35 400 15" />
-            </svg>
-            <div className="quarters">
-              <span>Q1</span>
-              <span>Q2</span>
-              <span>Q3</span>
-              <span>Q4</span>
-            </div>
-          </div>
-        </div>
-        <div className="panel appointments">
-          <div className="panel-header">
-            <h2>Appointments Summary</h2>
-            <a>View All ›</a>
-          </div>
-          {[
-            ["Completed", "Successfully attended", "1,240", "complete", Check],
-            ["Booked", "Upcoming sessions", "842", "booked", CalendarDays],
-            [
-              "Cancelled",
-              "Patient or provider cancelled",
-              "156",
-              "cancelled",
-              XCircle,
-            ],
-          ].map(([a, b, c, kind, Icon]) => (
-            <div className="appointment" key={a as string}>
-              <div className={`appointment-icon ${kind}`}>
-                <Icon />
-              </div>
-              <div>
-                <b>{a as string}</b>
-                <small>{b as string}</small>
-              </div>
-              <strong>{c as string}</strong>
-            </div>
-          ))}
-        </div>
+        <GrowthChartPanel />
+        <AppointmentsSummaryPanel appointments={appointments} />
       </section>
       <section className="bottom-grid">
-        <div className="panel service">
-          <div className="panel-header">
-            <h2>Service Usage</h2>
-            <span className="month">This Month</span>
-          </div>
-          {[
-            ["Contraception", "45%", "bar-1"],
-            ["Maternal Health", "30%", "bar-2"],
-            ["Nutrition", "15%", "bar-3"],
-            ["GBV Support", "10%", "bar-4"],
-          ].map(([name, pct, cls]) => (
-            <div className="usage" key={name}>
-              <div>
-                <b>{name}</b>
-                <span>{pct}</span>
-              </div>
-              <div className="track">
-                <i className={cls} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="panel activity">
-          <div className="panel-header">
-            <h2>Recent Activity</h2>
-          </div>
-          {[
-            [
-              "New Midwife Registration",
-              "Dr. Amina Yusuf applied for registration.",
-              "2m ago",
-              "pending",
-            ],
-            [
-              "Appointment Confirmed",
-              "Maternal checkup at City Clinic.",
-              "1h ago",
-              "confirmed",
-            ],
-            [
-              "New Complaint Logged",
-              "Service delay at Central Ward.",
-              "3h ago",
-              "open",
-            ],
-            [
-              "Hospital Approved",
-              "St. Jude's Medical Center onboarded.",
-              "1d ago",
-              "approved",
-            ],
-          ].map(([title, desc, time, tag]) => (
-            <div className="activity-row" key={title}>
-              <i className={tag} />
-              <div>
-                <b>{title}</b>
-                <small>{desc}</small>
-                <em>{tag}</em>
-              </div>
-              <span>{time}</span>
-            </div>
-          ))}
-        </div>
+        <ServiceUsagePanel items={serviceUsage} />
+        <ActivityPanel items={activity} />
       </section>
     </>
   );
 }
-const feedbackRows = [
-  ["Aster", "★★★★★", "Aug 19, 2023", "Very helpful and supportive session."],
-  ["Hana", "★★★★☆", "Aug 18, 2023", "Good consultation, very informative."],
-  [
-    "Sarah",
-    "★★★★★",
-    "Aug 17, 2023",
-    "Excellent care and attention to detail. Highly recommend.",
-  ],
-];
-const consultationRows = [
-  ["C-102", "Anonymous", "Midwife A", "Aug 19", "Completed"],
-  ["C-103", "Voice", "Midwife B", "Aug 19", "Active"],
-  ["C-104", "Messages", "Midwife C", "Aug 18", "Completed"],
-];
-const appointmentRows = [
-  ["Aug 19, 2024", "User 01", "Aster", "Online", "Booked"],
-  ["Aug 19, 2024", "User 02", "Hana", "In-person", "Completed"],
-  ["Aug 20, 2024", "User 03", "Selam", "Online", "Pending"],
-];
-const serviceRows = [
-  ["Contraceptive Counselling", "12"],
-  ["GBV Support", "8"],
-  ["Adolescent Nutrition", "6"],
-  ["Maternal Health", "10"],
-  ["Newborn Care", "5"],
-];
-
 function FeedbackView() {
+  const summaryQuery = useAsyncData(getFeedbackSummary, []);
+  const feedbackQuery = useAsyncData(getFeedback, []);
+
+  if (summaryQuery.loading || feedbackQuery.loading) {
+    return <LoadingState label="Loading feedback..." />;
+  }
+
+  if (summaryQuery.error || feedbackQuery.error) {
+    return (
+      <ErrorState
+        message={
+          summaryQuery.error ??
+          feedbackQuery.error ??
+          "Unable to load feedback."
+        }
+      />
+    );
+  }
+
+  const summary = summaryQuery.data!;
+  const feedbackRows = toTableRows(feedbackQuery.data?.data ?? []);
+
   return (
     <>
       <div className="page-heading">
@@ -390,22 +521,18 @@ function FeedbackView() {
         <div className="rating-card">
           <small>AVERAGE RATING</small>
           <strong>
-            4.6 <span>/ 5.0</span>
+            {summary.averageRating} <span>/ {summary.maxRating}</span>
           </strong>
           <div className="stars">★★★★☆</div>
-          <em>↗ +0.2 from last month</em>
+          {summary.trend && <em>{summary.trend}</em>}
         </div>
         <div className="panel distribution">
           <small>RATING DISTRIBUTION</small>
-          {[
-            ["5", "342", "90%"],
-            ["4", "89", "25%"],
-            ["3", "12", "6%"],
-          ].map(([rating, count, width]) => (
+          {summary.distribution.map(({ rating, count, percentage }) => (
             <div className="rating-row" key={rating}>
               <span>{rating} ★</span>
               <i>
-                <b style={{ width }} />
+                <b style={{ width: percentage }} />
               </i>
               <strong>{count}</strong>
             </div>
@@ -444,6 +571,28 @@ function FeedbackView() {
   );
 }
 function ConsultationsView() {
+  const statsQuery = useAsyncData(getConsultationStats, []);
+  const consultationsQuery = useAsyncData(getConsultations, []);
+
+  if (statsQuery.loading || consultationsQuery.loading) {
+    return <LoadingState label="Loading consultations..." />;
+  }
+
+  if (statsQuery.error || consultationsQuery.error) {
+    return (
+      <ErrorState
+        message={
+          statsQuery.error ??
+          consultationsQuery.error ??
+          "Unable to load consultations."
+        }
+      />
+    );
+  }
+
+  const stats = statsQuery.data!;
+  const consultationRows = toTableRows(consultationsQuery.data?.data ?? []);
+
   return (
     <>
       <div className="page-heading">
@@ -455,31 +604,57 @@ function ConsultationsView() {
       <section className="stats consultation-stats">
         <StatCard
           title="Anonymous"
-          value="1,240"
-          note={<b className="green-text">↗ +12%</b>}
+          value={String(stats.anonymous)}
+          note={
+            stats.anonymousChange ? (
+              <b className="green-text">↗ {stats.anonymousChange}</b>
+            ) : undefined
+          }
         />
         <StatCard
           title="Messages"
-          value="2,450"
+          value={String(stats.messages)}
           note={<>Consultation messages</>}
         />
-        <StatCard title="Voice" value="520" note={<>Voice sessions</>} />
+        <StatCard
+          title="Voice"
+          value={String(stats.voice)}
+          note={<>Voice sessions</>}
+        />
         <StatCard
           title="Completed"
-          value="3,200"
-          note={<b className="green-text">↗ +5%</b>}
+          value={String(stats.completed)}
+          note={
+            stats.completedChange ? (
+              <b className="green-text">↗ {stats.completedChange}</b>
+            ) : undefined
+          }
         />
       </section>
       <DataTable
         title="Recent Activity"
         headers={["ID", "Type", "Midwife", "Date", "Status", "Actions"]}
         rows={consultationRows}
-        total="45"
+        total={String(
+          consultationsQuery.data?.total ?? consultationRows.length,
+        )}
       />
     </>
   );
 }
 function AppointmentsView() {
+  const appointmentsQuery = useAsyncData(getAppointments, []);
+
+  if (appointmentsQuery.loading) {
+    return <LoadingState label="Loading appointments..." />;
+  }
+
+  if (appointmentsQuery.error) {
+    return <ErrorState message={appointmentsQuery.error} />;
+  }
+
+  const appointmentRows = toTableRows(appointmentsQuery.data?.data ?? []);
+
   return (
     <>
       <div className="page-heading">
@@ -492,13 +667,25 @@ function AppointmentsView() {
         title="All   Booked   Completed   Cancelled   Rescheduled"
         headers={["Date", "User", "Midwife", "Type", "Status", "Actions"]}
         rows={appointmentRows}
-        total="24 appointments"
+        total={`${appointmentsQuery.data?.total ?? appointmentRows.length} appointments`}
       />
     </>
   );
 }
 /** Health library view with filters and the entry point for new content. */
 function HealthView({ onAddContent }: { onAddContent: () => void }) {
+  const contentQuery = useAsyncData(getHealthContent, []);
+
+  if (contentQuery.loading) {
+    return <LoadingState label="Loading health content..." />;
+  }
+
+  if (contentQuery.error) {
+    return <ErrorState message={contentQuery.error} />;
+  }
+
+  const rows = toTableRows(contentQuery.data?.data ?? []);
+
   return (
     <>
       <div className="page-heading">
@@ -528,30 +715,25 @@ function HealthView({ onAddContent }: { onAddContent: () => void }) {
       <DataTable
         title="Content Library"
         headers={["Title", "Category", "Type", "Status", "Actions"]}
-        rows={[
-          [
-            "Understanding Maternal Health",
-            "Maternal Care",
-            "Article",
-            "Published",
-            "⋮",
-          ],
-          ["Newborn Care Guide", "Newborn Care", "PDF", "Published", "⋮"],
-          [
-            "Contraceptive Methods",
-            "Contraceptive Counselling",
-            "PDF",
-            "Review",
-            "⋮",
-          ],
-          ["Understanding GBV", "GBV Prevention", "Article", "Draft", "⋮"],
-        ]}
-        total="42"
+        rows={rows}
+        total={String(contentQuery.data?.total ?? rows.length)}
       />
     </>
   );
 }
 function ServicesView({ onAddCategory }: { onAddCategory?: () => void }) {
+  const servicesQuery = useAsyncData(getServices, []);
+
+  if (servicesQuery.loading) {
+    return <LoadingState label="Loading services..." />;
+  }
+
+  if (servicesQuery.error) {
+    return <ErrorState message={servicesQuery.error} />;
+  }
+
+  const serviceRows = toTableRows(servicesQuery.data?.data ?? []);
+
   return (
     <>
       <div className="page-heading">
@@ -566,8 +748,8 @@ function ServicesView({ onAddCategory }: { onAddCategory?: () => void }) {
       <DataTable
         title="Search categories...                                      Filter"
         headers={["Category", "Services", "Status", "Actions"]}
-        rows={serviceRows.map((row) => [row[0], row[1], "Active", ""])}
-        total="5 entries"
+        rows={serviceRows}
+        total={`${servicesQuery.data?.total ?? serviceRows.length} entries`}
       />
     </>
   );
@@ -636,16 +818,24 @@ function DataTable({
   );
 }
 
-const emergencyRows = [
-  ["Emergency", "911", "National", "Active"],
-  ["GBV Support", "116", "National", "Active"],
-  ["Health Line", "XXX", "Addis", "Active"],
-];
 function EmergencyContactsView({
   onAddContact,
 }: {
   onAddContact?: () => void;
 }) {
+  const contactsQuery = useAsyncData(getEmergencyContacts, []);
+
+  if (contactsQuery.loading) {
+    return <LoadingState label="Loading emergency contacts..." />;
+  }
+
+  if (contactsQuery.error) {
+    return <ErrorState message={contactsQuery.error} />;
+  }
+
+  const emergencyRows = toTableRows(contactsQuery.data?.data ?? []);
+  const total = contactsQuery.data?.total ?? emergencyRows.length;
+
   return (
     <>
       <div className="page-heading">
@@ -694,7 +884,7 @@ function EmergencyContactsView({
             </tbody>
           </table>
           <div className="table-footer">
-            Showing 1 to 3 of 3 entries{" "}
+            Showing 1 to {emergencyRows.length} of {total} entries{" "}
             <div>
               <button>Prev</button>
               <button>Next</button>
@@ -705,7 +895,13 @@ function EmergencyContactsView({
     </>
   );
 }
-function SettingsView({ onAdministration }: { onAdministration: () => void }) {
+function SettingsView({
+  onAdministration,
+  user,
+}: {
+  onAdministration: () => void;
+  user: AdminUser;
+}) {
   const items = [
     ["Profile", "Update your name, email and profile picture"],
     ["Administration", "Manage Administration preferences"],
@@ -765,9 +961,13 @@ function SettingsView({ onAdministration }: { onAdministration: () => void }) {
           </button>
         </div>
         <aside className="profile-card">
-          <div className="profile-avatar">SJ</div>
-          <h2>Dr. Sarah Jenkins</h2>
-          <p>Lead Administrator</p>
+          <div className="profile-avatar">{getInitials(user.name)}</div>
+          <h2>{user.name}</h2>
+          <p>
+            {user.role === "super_admin"
+              ? "Super Administrator"
+              : "Administrator"}
+          </p>
           <em>ACTIVE</em>
           <div className="support-card">
             <b>ⓘ Need Help?</b>
@@ -836,48 +1036,59 @@ function Modal({
     </div>
   );
 }
-function ConsultationReportView() {
+function ConsultationReportView({ midwifeId }: { midwifeId?: string }) {
+  const reportQuery = useAsyncData(
+    () => getConsultationReport(midwifeId),
+    [midwifeId],
+  );
+
+  if (reportQuery.loading) {
+    return <LoadingState label="Loading consultation report..." />;
+  }
+
+  if (reportQuery.error || !reportQuery.data) {
+    return (
+      <ErrorState
+        message={reportQuery.error ?? "Unable to load consultation report."}
+      />
+    );
+  }
+
+  const report = reportQuery.data;
+  const historyRows = toTableRows(report.history.data);
+
   return (
     <>
       <button className="back-link">← Consultation Reports</button>
       <div className="report-profile">
-        <div className="mini-avatar">AT</div>
+        <div className="mini-avatar">{getInitials(report.name)}</div>
         <div>
-          <h1>ASTER TESFAYE</h1>
-          <p>Midwife • St. Peter Hospital</p>
+          <h1>{report.name}</h1>
+          <p>{report.subtitle}</p>
         </div>
-        <span className="status active">Active</span>
+        <span className={`status ${report.status.toLowerCase()}`}>
+          {report.status}
+        </span>
       </div>
       <section className="stats report-stats">
-        {[
-          ["People", "82"],
-          ["Consult.", "124"],
-          ["Completed", "95.2%"],
-          ["Avg Rating", "4.8★"],
-          ["Avg Duration", "18m"],
-        ].map(([a, b]) => (
-          <div className="stat-card" key={a}>
-            <small>{a}</small>
-            <strong>{b}</strong>
+        {report.stats.map(({ label, value }) => (
+          <div className="stat-card" key={label}>
+            <small>{label}</small>
+            <strong>{String(value)}</strong>
           </div>
         ))}
       </section>
       <section className="report-grid">
         <div className="panel">
           <h2>Consultation Breakdown</h2>
-          {[
-            ["Anonymous Chat", "48", "40%"],
-            ["Direct Messages", "34", "28%"],
-            ["Voice", "18", "15%"],
-            ["Online", "24", "20%"],
-          ].map(([a, b, w]) => (
-            <div className="breakdown" key={a}>
+          {report.breakdown.map(({ label, count, width }) => (
+            <div className="breakdown" key={label}>
               <b>
-                {a}
-                <span>{b}</span>
+                {label}
+                <span>{String(count)}</span>
               </b>
               <i>
-                <em style={{ width: w }} />
+                <em style={{ width }} />
               </i>
             </div>
           ))}
@@ -898,18 +1109,31 @@ function ConsultationReportView() {
         <DataTable
           title=""
           headers={["Date", "Type", "Users", "Status"]}
-          rows={[
-            ["Aug 28, 2026", "Anonymous Chat", "User #8932", "Completed"],
-            ["Aug 28, 2026", "Voice", "User #1124", "Completed"],
-            ["Aug 27, 2026", "Direct Message", "User #4451", "Missed"],
-          ]}
-          total="124"
+          rows={historyRows}
+          total={String(report.history.total)}
         />
       </div>
     </>
   );
 }
 function AnalyticsView() {
+  const analyticsQuery = useAsyncData(getAnalytics, []);
+
+  if (analyticsQuery.loading) {
+    return <LoadingState label="Loading analytics..." />;
+  }
+
+  if (analyticsQuery.error || !analyticsQuery.data) {
+    return (
+      <ErrorState
+        message={analyticsQuery.error ?? "Unable to load analytics."}
+      />
+    );
+  }
+
+  const analytics = analyticsQuery.data;
+  const performanceRows = toTableRows(analytics.midwifePerformance.data);
+
   return (
     <>
       <div className="page-heading">
@@ -944,15 +1168,10 @@ function AnalyticsView() {
         </label>
       </div>
       <section className="stats report-stats">
-        {[
-          ["Midwives", "86"],
-          ["People", "1,240"],
-          ["Consultations", "2,450"],
-          ["Avg Duration", "18 min"],
-        ].map(([a, b]) => (
-          <div className="stat-card" key={a}>
-            <small>{a}</small>
-            <strong>{b}</strong>
+        {analytics.stats.map(({ label, value }) => (
+          <div className="stat-card" key={label}>
+            <small>{label}</small>
+            <strong>{String(value)}</strong>
           </div>
         ))}
       </section>
@@ -975,14 +1194,8 @@ function AnalyticsView() {
             "Rating",
             "Status",
           ]}
-          rows={[
-            ["Aster", "82", "124", "118", "★ 4.8", "Active"],
-            ["Hana", "64", "98", "92", "★ 4.6", "Active"],
-            ["Clara", "45", "70", "65", "★ 4.9", "Active"],
-            ["Maya", "90", "150", "145", "★ 4.7", "Away"],
-            ["Elena", "30", "45", "40", "★ 4.5", "Active"],
-          ]}
-          total="86"
+          rows={performanceRows}
+          total={String(analytics.midwifePerformance.total)}
         />
       </section>
     </>
@@ -996,15 +1209,50 @@ function TableView({
   onMidwife?: (status: string) => void;
 }) {
   const isHospitals = type === "Hospitals";
-  const rows = isHospitals ? hospitals : people;
+  const isMidwives = type === "Midwives";
+  const recordsQuery = useAsyncData<
+    PaginatedResponse<DirectoryRecord> | PaginatedResponse<HospitalRecord>
+  >(() => {
+    if (isHospitals) return getHospitals();
+    if (isMidwives) return getMidwives();
+    return getUsers();
+  }, [type]);
   const [query, setQuery] = useState("");
-  const filtered = useMemo(
-    () =>
-      rows.filter((r) =>
-        r.join(" ").toLowerCase().includes(query.toLowerCase()),
-      ),
-    [rows, query],
-  );
+
+  const filtered = useMemo(() => {
+    if (!recordsQuery.data) return [];
+
+    if (isHospitals) {
+      return (recordsQuery.data.data as HospitalRecord[]).filter((record) =>
+        [record.name, record.id, record.location, record.status]
+          .join(" ")
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+      );
+    }
+
+    return (recordsQuery.data.data as DirectoryRecord[]).filter((record) =>
+      [record.name, record.id, record.contact, record.location, record.status]
+        .join(" ")
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+    );
+  }, [isHospitals, query, recordsQuery.data]);
+
+  if (recordsQuery.loading) {
+    return <LoadingState label={`Loading ${type.toLowerCase()}...`} />;
+  }
+
+  if (recordsQuery.error || !recordsQuery.data) {
+    return (
+      <ErrorState
+        message={recordsQuery.error ?? `Unable to load ${type.toLowerCase()}.`}
+      />
+    );
+  }
+
+  const total = recordsQuery.data.total;
+
   return (
     <>
       <div className="page-heading">
@@ -1067,47 +1315,63 @@ function TableView({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
-              <tr
-                key={r[1]}
-                onClick={() => type === "Midwives" && onMidwife?.(r[4])}
-              >
-                <td>
-                  <div className="table-person">
-                    <div className="mini-avatar">
-                      {isHospitals ? (
-                        <Hospital />
-                      ) : (
-                        r[0]
-                          .split(" ")
-                          .map((x) => x[0])
-                          .join("")
-                      )}
-                    </div>
-                    <div>
-                      <b>{r[0]}</b>
-                      <small>ID: {r[1]}</small>
-                    </div>
-                  </div>
-                </td>
-                <td>{r[2]}</td>
-                <td>
-                  {isHospitals ? <span className="count">{r[3]}</span> : r[3]}
-                </td>
-                <td>
-                  <span className={`status ${r[4].toLowerCase()}`}>{r[4]}</span>
-                </td>
-                {isHospitals && (
-                  <td>
-                    <MoreVertical />
-                  </td>
-                )}
-              </tr>
-            ))}
+            {isHospitals
+              ? (filtered as HospitalRecord[]).map((record) => (
+                  <tr key={record.id}>
+                    <td>
+                      <div className="table-person">
+                        <div className="mini-avatar">
+                          <Hospital />
+                        </div>
+                        <div>
+                          <b>{record.name}</b>
+                          <small>ID: {record.id}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{record.location}</td>
+                    <td>
+                      <span className="count">{record.midwifeCount}</span>
+                    </td>
+                    <td>
+                      <span className={`status ${record.status.toLowerCase()}`}>
+                        {record.status}
+                      </span>
+                    </td>
+                    <td>
+                      <MoreVertical />
+                    </td>
+                  </tr>
+                ))
+              : (filtered as DirectoryRecord[]).map((record) => (
+                  <tr
+                    key={record.id}
+                    onClick={() => isMidwives && onMidwife?.(record.status)}
+                  >
+                    <td>
+                      <div className="table-person">
+                        <div className="mini-avatar">
+                          {getInitials(record.name)}
+                        </div>
+                        <div>
+                          <b>{record.name}</b>
+                          <small>ID: {record.id}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{record.contact}</td>
+                    <td>{record.location}</td>
+                    <td>
+                      <span className={`status ${record.status.toLowerCase()}`}>
+                        {record.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
           </tbody>
         </table>
         <div className="table-footer">
-          Showing 1 to {filtered.length} of {isHospitals ? 42 : 248} entries{" "}
+          Showing 1 to {filtered.length} of {total} entries{" "}
           <div>
             <button>
               <ChevronLeft />
@@ -1128,11 +1392,21 @@ function TableView({
  * Root dashboard controller. `active` selects the page, `open` controls the
  * mobile sidebar, and `modal` identifies the currently open dialog.
  */
-export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) {
+export default function AdminDashboard({
+  onLogout,
+}: {
+  onLogout?: () => void;
+}) {
+  const { user } = useAuth();
   const [active, setActive] = useState("Dashboard");
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<string | null>(null);
   const [notice, setNotice] = useState(false);
+
+  if (!user) {
+    return <LoadingState label="Loading account..." />;
+  }
+
   const content =
     active === "Dashboard" ? (
       <Dashboard />
@@ -1151,7 +1425,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     ) : active === "Emergency Contacts" ? (
       <EmergencyContactsView onAddContact={() => setModal("contact")} />
     ) : active === "Settings" ? (
-      <SettingsView onAdministration={() => setActive("Administration")} />
+      <SettingsView
+        onAdministration={() => setActive("Administration")}
+        user={user}
+      />
     ) : active === "Administration" ? (
       <AdministrationView />
     ) : (
@@ -1170,15 +1447,21 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     <>
       <AdminShell
         sidebar={
-      <Sidebar
-        active={active}
-        setActive={setActive}
-        open={open}
-        setOpen={setOpen}
-        onLogout={onLogout}
-      />
+          <Sidebar
+            active={active}
+            setActive={setActive}
+            open={open}
+            setOpen={setOpen}
+            onLogout={onLogout}
+          />
         }
-        header={<Topbar setOpen={setOpen} onNotify={() => setNotice(true)} />}
+        header={
+          <Topbar
+            setOpen={setOpen}
+            onNotify={() => setNotice(true)}
+            user={user}
+          />
+        }
         isSidebarOpen={open}
         onDismissSidebar={() => setOpen(false)}
       >
@@ -1316,85 +1599,3 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     </>
   );
 }
-/* legacy render intentionally replaced */
-function LegacyAdminDashboard() {
-  const [active, setActive] = useState("Dashboard");
-  const [open, setOpen] = useState(false);
-  const content =
-    active === "Dashboard" ? (
-      <Dashboard />
-    ) : active === "Feedback" ? (
-      <FeedbackView />
-    ) : active === "Consultations" ? (
-      <ConsultationsView />
-    ) : active === "Appointments" ? (
-      <AppointmentsView />
-    ) : active === "Services" ? (
-      <ServicesView />
-    ) : active === "Emergency Contacts" ? (
-      <EmergencyContactsView />
-    ) : active === "Settings" ? (
-      <SettingsView onAdministration={() => setActive("Administration")} />
-    ) : active === "Administration" ? (
-      <AdministrationView />
-    ) : (
-      <TableView
-        type={
-          active === "Midwives"
-            ? "Midwives"
-            : active === "Hospitals"
-              ? "Hospitals"
-              : "Users"
-        }
-      />
-    );
-  return (
-    <div className="app-shell">
-      <Sidebar
-        active={active}
-        setActive={setActive}
-        open={open}
-        setOpen={setOpen}
-      />
-      <div className="main-area">
-        <Topbar setOpen={setOpen} onNotify={() => setNotice(true)} />
-        <main>{content}</main>
-      </div>
-      {notice && (
-        <Modal title="Create Notification" onClose={() => setNotice(false)}>
-          <p>Notification Title</p>
-          <input
-            className="modal-input"
-            defaultValue="Upcoming appointment reminder"
-          />
-          <p>Message</p>
-          <textarea
-            className="modal-input"
-            defaultValue="Your appointment with your midwife is tomorrow..."
-          />
-          <p>Target Audience</p>
-          <select className="modal-input">
-            <option>All Users</option>
-            <option>Adolescent Girls & Young Women</option>
-            <option>Midwives</option>
-          </select>
-          <div className="modal-actions">
-            <button onClick={() => setNotice(false)}>Cancel</button>
-            <button className="primary" onClick={() => setNotice(false)}>
-              Send Notification
-            </button>
-          </div>
-        </Modal>
-      )}
-      {open && (
-        <button
-          className="scrim"
-          onClick={() => setOpen(false)}
-          aria-label="Close navigation"
-        />
-      )}
-    </div>
-  );
-}
-
-export { LegacyAdminDashboard };
