@@ -4,9 +4,15 @@
  * This module contains the interactive admin dashboard. It is a client module
  * because navigation, filters, dialogs, and form controls all need React state.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import logo from "../assets/logo.jpg";
 import {
+  createAdminAccount,
+  createEmergencyContact,
+  createHospital,
+  createMidwifeAccount,
+  createUserAccount,
+  getAdminLanguagePreference,
   getAnalytics,
   getAdminDashboard,
   getAppointments,
@@ -22,21 +28,37 @@ import {
   getMidwifeApplications,
   getMidwives,
   reviewMidwifeApplication,
+  updateMidwifeApplication,
   getServices,
   getUsers,
+  updateAdminLanguagePreference,
 } from "../features/admin/api/admin-api";
 import type {
   DirectoryRecord,
   HospitalRecord,
   MidwifeApplication,
   MidwifeReviewAction,
+  UpdateMidwifeApplicationPayload,
   PaginatedResponse,
   TableRecord,
+  CreateEmergencyContactPayload,
+  CreateHospitalPayload,
+  AdminLanguagePreference,
 } from "../features/admin/api/types";
 import { useAsyncData } from "../features/admin/hooks/useAsyncData";
 import { useAuth } from "../features/auth/auth-context";
 import type { AdminUser } from "../features/auth/types";
 import { AdminShell } from "./layout/AdminShell";
+import { AccountFormModal } from "./forms/AccountFormModal";
+import { AccountFormPage } from "./forms/AccountFormPage";
+import {
+  ReviewMidwifeRegistrationDialog,
+  type PendingMidwife,
+} from "./dialogue/midwife_review";
+import { RejectMidwifeRegistrationDialog } from "./dialogue/midwife_reject";
+import { MidwifeCvReviewDialog } from "./dialogue/midwife_cv_review";
+import type { AccountFormVariant } from "./forms/account-form-config";
+import type { AccountFormValues } from "./forms/account-form-config";
 import { StatCard } from "./ui/stat-card";
 import {
   Activity,
@@ -58,8 +80,13 @@ import {
   Settings,
   ShieldCheck,
   Stethoscope,
+  UserCog,
   Users,
   XCircle,
+  CirclePlus,
+  Crosshair,
+  MapPin,
+  Phone,
 } from "lucide-react";
 
 function getInitials(name: string) {
@@ -103,6 +130,7 @@ const manageItems = [
   { label: "Services", icon: Stethoscope },
   { label: "Feedback", icon: AlertTriangle },
   { label: "Analytics", icon: BarChart3 },
+  { label: "Administration", icon: UserCog },
   { label: "Settings", icon: Settings },
 ];
 /** Brand block reused at the top of the responsive sidebar. */
@@ -110,10 +138,10 @@ function Brand() {
   return (
     <div className="brand">
       <div className="brand-mark">
-        <img src={logo} alt="Emma Healthcare logo" />
+        <img src={logo} alt="CAGH logo" />
       </div>
       <div>
-        <strong>Emma</strong>
+        <strong>CAGH</strong>
         <span>Healthcare Admin</span>
       </div>
     </div>
@@ -411,8 +439,20 @@ function Dashboard() {
     return <LoadingState label="Loading dashboard..." />;
   }
 
-  if (dashboardQuery.error || hospitalCountQuery.error || !dashboardQuery.data) {
-    return <ErrorState message={dashboardQuery.error ?? hospitalCountQuery.error ?? "Unable to load dashboard."} />;
+  if (
+    dashboardQuery.error ||
+    hospitalCountQuery.error ||
+    !dashboardQuery.data
+  ) {
+    return (
+      <ErrorState
+        message={
+          dashboardQuery.error ??
+          hospitalCountQuery.error ??
+          "Unable to load dashboard."
+        }
+      />
+    );
   }
 
   const dashboard = dashboardQuery.data;
@@ -422,9 +462,26 @@ function Dashboard() {
     count: number;
     kind: "complete" | "booked" | "cancelled";
   }> = [
-    { label: "Completed", description: "Successfully attended", count: dashboard.appointments_by_status.COMPLETED ?? 0, kind: "complete" },
-    { label: "Booked", description: "Upcoming sessions", count: (dashboard.appointments_by_status.CONFIRMED ?? 0) + (dashboard.appointments_by_status.PENDING ?? 0), kind: "booked" },
-    { label: "Cancelled", description: "Patient or provider cancelled", count: dashboard.appointments_by_status.CANCELLED ?? 0, kind: "cancelled" },
+    {
+      label: "Completed",
+      description: "Successfully attended",
+      count: dashboard.appointments_by_status.COMPLETED ?? 0,
+      kind: "complete",
+    },
+    {
+      label: "Booked",
+      description: "Upcoming sessions",
+      count:
+        (dashboard.appointments_by_status.CONFIRMED ?? 0) +
+        (dashboard.appointments_by_status.PENDING ?? 0),
+      kind: "booked",
+    },
+    {
+      label: "Cancelled",
+      description: "Patient or provider cancelled",
+      count: dashboard.appointments_by_status.CANCELLED ?? 0,
+      kind: "cancelled",
+    },
   ];
   const activity = dashboard.recent_activities.map((item) => ({
     title: item.action.replaceAll("_", " "),
@@ -435,17 +492,58 @@ function Dashboard() {
   const stats = {
     totalUsers: dashboard.totals.users,
     totalMidwives: dashboard.totals.midwives,
-    midwivesPending: (dashboard.midwives_by_verification_status.PENDING ?? 0) + (dashboard.midwives_by_verification_status.UNDER_REVIEW ?? 0),
+    midwivesPending:
+      (dashboard.midwives_by_verification_status.PENDING ?? 0) +
+      (dashboard.midwives_by_verification_status.UNDER_REVIEW ?? 0),
     hospitals: hospitalCountQuery.data ?? 0,
     consultations: dashboard.totals.consultations,
   };
+  function exportDashboard() {
+    // Export the same live totals and activity rows currently shown on screen.
+    const escapeCsv = (value: string | number) =>
+      `"${String(value).replaceAll('"', '""')}"`;
+    const rows = [
+      ["Metric", "Value"],
+      ["Total users", stats.totalUsers],
+      ["Total midwives", stats.totalMidwives],
+      ["Pending midwives", stats.midwivesPending],
+      ["Hospitals", stats.hospitals],
+      ["Consultations", stats.consultations],
+      [],
+      ["Appointment outcome", "Count"],
+      ...appointments.map((appointment) => [
+        appointment.label,
+        appointment.count,
+      ]),
+      [],
+      ["Activity", "Performed by", "Timestamp"],
+      ...dashboard.recent_activities.map((item) => [
+        item.action,
+        item.performed_by ?? "System",
+        item.timestamp,
+      ]),
+    ];
+    const csv = rows
+      .map((row) => row.map((cell) => escapeCsv(cell ?? "")).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `cagh-dashboard-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
   return (
     <>
       <PageHeader
         title="Dashboard"
-        subtitle="Welcome back, Administrator. Here's what's happening on Emma today."
+        subtitle="Welcome back, Administrator. Here's what's happening on CAGH today."
         actions={
-          <button className="outline">Export Data</button>
+          <button type="button" className="outline" onClick={exportDashboard}>
+            Export Data
+          </button>
         }
       />
       <StatsGrid stats={stats} />
@@ -793,10 +891,13 @@ function DataTable({
 
 function EmergencyContactsView({
   onAddContact,
+  refreshKey,
 }: {
   onAddContact?: () => void;
+  refreshKey: number;
 }) {
-  const contactsQuery = useAsyncData(getEmergencyContacts, []);
+  // Re-fetch after a successful create so the new contact appears immediately.
+  const contactsQuery = useAsyncData(getEmergencyContacts, [refreshKey]);
 
   if (contactsQuery.loading) {
     return <LoadingState label="Loading emergency contacts..." />;
@@ -814,7 +915,7 @@ function EmergencyContactsView({
       <div className="page-heading">
         <div>
           <h1>Emergency Contacts</h1>
-          <p>Manage critical service numbers and regional availability.</p>
+          <p>Review emergency contacts registered for platform users.</p>
         </div>
         <button className="primary" onClick={onAddContact}>
           + Add Contact
@@ -832,11 +933,17 @@ function EmergencyContactsView({
           <table>
             <thead>
               <tr>
-                {["Service", "Number", "Region", "Status", "Actions"].map(
-                  (h) => (
-                    <th key={h}>{h}</th>
-                  ),
-                )}
+                {/* Columns match GET /api/v1/admin/emergency-contacts/. */}
+                {[
+                  "Contact",
+                  "Phone",
+                  "Relationship",
+                  "Priority",
+                  "Owner",
+                  "Actions",
+                ].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -875,7 +982,34 @@ function SettingsView({
   onAdministration: () => void;
   user: AdminUser;
 }) {
-  const [language, setLanguage] = useState("english");
+  // Read the persisted preference so the selected radio survives a refresh.
+  const languageQuery = useAsyncData(getAdminLanguagePreference, []);
+  const [savingLanguage, setSavingLanguage] = useState(false);
+  const [languageError, setLanguageError] = useState<string | null>(null);
+  const [savedLanguage, setSavedLanguage] = useState<
+    AdminLanguagePreference["preferred_language"] | null
+  >(null);
+  const language = savedLanguage ?? languageQuery.data?.preferred_language ?? "en";
+
+  async function changeLanguage(
+    preferredLanguage: AdminLanguagePreference["preferred_language"],
+  ) {
+    setLanguageError(null);
+    setSavingLanguage(true);
+    try {
+      // PATCH /api/v1/admin/language/ updates only the active administrator.
+      const updatedPreference = await updateAdminLanguagePreference(preferredLanguage);
+      // Reflect the accepted backend value immediately; the next page load
+      // will retrieve the same value through GET /admin/language/.
+      setSavedLanguage(updatedPreference.preferred_language);
+    } catch (cause) {
+      setLanguageError(
+        cause instanceof Error ? cause.message : "Unable to save language.",
+      );
+    } finally {
+      setSavingLanguage(false);
+    }
+  }
   const items = [
     ["Profile", "Update your name, email and profile picture"],
     ["Administration", "Manage Administration preferences"],
@@ -930,9 +1064,10 @@ function SettingsView({
                   <input
                     type="radio"
                     name="language"
-                    value="english"
-                    checked={language === "english"}
-                    onChange={(event) => setLanguage(event.target.value)}
+                    value="en"
+                    checked={language === "en"}
+                    disabled={savingLanguage || languageQuery.loading}
+                    onChange={() => changeLanguage("en")}
                   />
                   English
                 </label>
@@ -940,13 +1075,17 @@ function SettingsView({
                   <input
                     type="radio"
                     name="language"
-                    value="amharic"
-                    checked={language === "amharic"}
-                    onChange={(event) => setLanguage(event.target.value)}
+                    value="am"
+                    checked={language === "am"}
+                    disabled={savingLanguage || languageQuery.loading}
+                    onChange={() => changeLanguage("am")}
                   />
                   Amharic
                 </label>
               </span>
+              {languageError ? (
+                <small role="alert">{languageError}</small>
+              ) : null}
             </span>
           </fieldset>
           <button className="logout settings-logout">
@@ -966,7 +1105,7 @@ function SettingsView({
           <div className="support-card">
             <b>ⓘ Need Help?</b>
             <p>
-              Contact Emma support for assistance with your account settings.
+              Contact CAGH support for assistance with your account settings.
             </p>
             <button>Contact Support</button>
           </div>
@@ -975,17 +1114,30 @@ function SettingsView({
     </>
   );
 }
-function AdministrationView() {
+function AdministrationView({
+  onAddAdmin,
+  onOpenAdministrators,
+}: {
+  onAddAdmin: () => void;
+  onOpenAdministrators: () => void;
+}) {
   return (
     <>
-      <div className="page-heading">
-        <div>
-          <h1>Administration</h1>
-          <p>Manage administrators, roles and platform permissions.</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Administration"
+        subtitle="Manage administrators, roles and platform permissions."
+        actions={
+          <button type="button" className="primary" onClick={onAddAdmin}>
+            + Add Administrator
+          </button>
+        }
+      />
       <div className="admin-tiles">
-        <button className="admin-tile">
+        <button
+          type="button"
+          className="admin-tile"
+          onClick={onOpenAdministrators}
+        >
           <span>♟</span>
           <b>ADMINISTRATORS</b>
           <small>Manage admin accounts</small>
@@ -1201,80 +1353,506 @@ function AnalyticsView() {
  * Approval is immediate; rejecting and suspending prompt for the reason that
  * Django requires for those two review actions.
  */
-function MidwivesView() {
+function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
   const applicationsQuery = useAsyncData(getMidwifeApplications, []);
-  const [applications, setApplications] = useState<MidwifeApplication[] | null>(null);
+  // The admin credentials form uses real hospital UUIDs, not free text.
+  const hospitalsQuery = useAsyncData(getHospitals, []);
+  const [applications, setApplications] = useState<MidwifeApplication[] | null>(
+    null,
+  );
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [reviewingApplication, setReviewingApplication] =
+    useState<MidwifeApplication | null>(null);
+  const [viewingCvApplication, setViewingCvApplication] =
+    useState<MidwifeApplication | null>(null);
+  const [rejectingApplication, setRejectingApplication] =
+    useState<MidwifeApplication | null>(null);
 
   // Copy fetched items into local state only once so a completed review can
   // remove its application from the default pending/under-review queue.
-  const displayedApplications = applications ?? (applicationsQuery.data?.data ?? []);
+  const displayedApplications =
+    applications ?? applicationsQuery.data?.data ?? [];
 
-  async function handleReview(application: MidwifeApplication, action: MidwifeReviewAction) {
-    const reason = action === "APPROVE" ? undefined : window.prompt(`Reason for ${action.toLowerCase()}ing this midwife:`)?.trim();
+  function toPendingMidwife(application: MidwifeApplication): PendingMidwife {
+    return {
+      name: application.user.username || application.user.email,
+      phone: application.user.phone_number || "Not provided",
+      email: application.user.email || "Not provided",
+      license: application.license_number || "Not provided",
+      qualification: application.qualifications.length
+        ? "Credentials submitted"
+        : "Not provided",
+      experience: `${application.experience_years} years`,
+      registered: application.created_at,
+      cv: application.cv_file_url ? "CV attached to application" : "No CV uploaded",
+    };
+  }
+
+  async function handleReview(
+    application: MidwifeApplication,
+    action: MidwifeReviewAction,
+    suppliedReason?: string,
+  ) {
+    const reason =
+      suppliedReason ??
+      (action === "SUSPEND"
+        ? window.prompt("Reason for suspending this midwife:")?.trim()
+        : undefined);
     if (action !== "APPROVE" && !reason) return;
 
     setPendingId(application.id);
     setMessage(null);
     try {
-      const result = await reviewMidwifeApplication(application.id, action, reason);
+      const result = await reviewMidwifeApplication(
+        application.id,
+        action,
+        reason,
+      );
       // Reviewed records no longer belong in the default pending queue.
-      setApplications(displayedApplications.filter((item) => item.id !== application.id));
+      setApplications(
+        displayedApplications.filter((item) => item.id !== application.id),
+      );
       setMessage(result.message);
+      setReviewingApplication(null);
+      setViewingCvApplication(null);
+      setRejectingApplication(null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to review this application.");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to review this application.",
+      );
     } finally {
       setPendingId(null);
     }
   }
 
-  if (applicationsQuery.loading) return <LoadingState label="Loading midwife applications..." />;
-  if (applicationsQuery.error) return <ErrorState message={applicationsQuery.error} />;
+  async function saveCredentialsAndApprove(
+    application: MidwifeApplication,
+    payload: UpdateMidwifeApplicationPayload,
+  ) {
+    setPendingId(application.id);
+    setMessage(null);
+    try {
+      // Persist all profile/CV fields before the verification decision.
+      await updateMidwifeApplication(application.id, payload);
+      const result = await reviewMidwifeApplication(application.id, "APPROVE");
+      setApplications(
+        displayedApplications.filter((item) => item.id !== application.id),
+      );
+      setMessage(result.message);
+      setReviewingApplication(null);
+      setViewingCvApplication(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to approve this application.";
+      setMessage(message);
+      // The CV dialog keeps open and displays this same error beside its form.
+      throw new Error(message);
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  if (applicationsQuery.loading || hospitalsQuery.loading)
+    return <LoadingState label="Loading midwife applications..." />;
+  if (applicationsQuery.error || hospitalsQuery.error)
+    return <ErrorState message={applicationsQuery.error ?? hospitalsQuery.error ?? "Unable to load midwife applications."} />;
 
   return (
     <>
-      <PageHeader title="Midwife Applications" subtitle="Review submitted professional credentials and account status." />
-      {message ? <p className="loading-state" role="status">{message}</p> : null}
+      <PageHeader
+        title="Midwife Applications"
+        subtitle="Review submitted professional credentials and account status."
+        actions={
+          <button type="button" className="primary" onClick={onAddMidwife}>
+            + Add Midwife
+          </button>
+        }
+      />
+      {message ? (
+        <p className="loading-state" role="status">
+          {message}
+        </p>
+      ) : null}
       <div className="panel data-panel">
-        <div className="panel-header"><h2>Pending Review</h2></div>
+        <div className="panel-header">
+          <h2>Pending Review</h2>
+        </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Midwife</th><th>License</th><th>Specialty</th><th>Hospital</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Midwife</th>
+                <th>License</th>
+                <th>Specialty</th>
+                <th>Hospital</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
             <tbody>
               {displayedApplications.map((application) => {
                 const disabled = pendingId === application.id;
                 return (
                   <tr key={application.id}>
-                    <td><b>{application.user.username || application.user.email}</b><small>{application.user.email}</small></td>
+                    <td>
+                      <b>
+                        {application.user.username || application.user.email}
+                      </b>
+                      <small>{application.user.email}</small>
+                    </td>
                     <td>{application.license_number}</td>
                     <td>{application.specialty || "—"}</td>
                     <td>{application.hospital?.name ?? "—"}</td>
-                    <td><span className={`status ${application.verification_status.toLowerCase()}`}>{application.verification_status}</span></td>
                     <td>
-                      {/* These buttons call POST /midwives/applications/{id}/review/. */}
-                      <button disabled={disabled} className="primary" onClick={() => handleReview(application, "APPROVE")}>Approve</button>{" "}
-                      <button disabled={disabled} onClick={() => handleReview(application, "REJECT")}>Reject</button>{" "}
-                      <button disabled={disabled} onClick={() => handleReview(application, "SUSPEND")}>Suspend</button>
+                      <span
+                        className={`status ${application.verification_status.toLowerCase()}`}
+                      >
+                        {application.verification_status}
+                      </span>
+                    </td>
+                    <td>
+                      {/* Open a dialog bound to this application's UUID before reviewing it. */}
+                      <button
+                        disabled={disabled}
+                        className="primary"
+                        onClick={() => setReviewingApplication(application)}
+                      >
+                        Review
+                      </button>{" "}
+                      <button
+                        disabled={disabled}
+                        onClick={() => handleReview(application, "SUSPEND")}
+                      >
+                        Suspend
+                      </button>
                     </td>
                   </tr>
                 );
               })}
-              {!displayedApplications.length ? <tr><td colSpan={6}>No applications awaiting review.</td></tr> : null}
+              {!displayedApplications.length ? (
+                <tr>
+                  <td colSpan={6}>No applications awaiting review.</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
       </div>
+      {reviewingApplication ? (
+        <ReviewMidwifeRegistrationDialog
+          midwife={toPendingMidwife(reviewingApplication)}
+          onClose={() => setReviewingApplication(null)}
+          onViewCv={() => setViewingCvApplication(reviewingApplication)}
+        />
+      ) : null}
+      {viewingCvApplication ? (
+        <MidwifeCvReviewDialog
+          midwife={toPendingMidwife(viewingCvApplication)}
+          hospitals={hospitalsQuery.data?.data ?? []}
+          initialValues={{
+            licenseNumber: viewingCvApplication.license_number ?? "",
+            bio: viewingCvApplication.bio ?? "",
+            experienceYears: viewingCvApplication.experience_years ?? 0,
+            hospitalId: viewingCvApplication.hospital?.id ?? "",
+            cvUrl: viewingCvApplication.cv_file_url,
+          }}
+          onClose={() => setViewingCvApplication(null)}
+          onApprove={(payload) =>
+            saveCredentialsAndApprove(viewingCvApplication, payload)
+          }
+          onReject={() => {
+            setRejectingApplication(viewingCvApplication);
+            setViewingCvApplication(null);
+            setReviewingApplication(null);
+          }}
+        />
+      ) : null}
+      {rejectingApplication ? (
+        <RejectMidwifeRegistrationDialog
+          midwife={toPendingMidwife(rejectingApplication)}
+          onClose={() => setRejectingApplication(null)}
+          // This calls POST /midwives/applications/{id}/review/ with REJECT.
+          onConfirm={(reason) =>
+            handleReview(rejectingApplication, "REJECT", reason.trim())
+          }
+        />
+      ) : null}
     </>
+  );
+}
+
+function EmergencyContactForm({
+  onSave,
+  onCancel,
+}: {
+  onSave: (payload: CreateEmergencyContactPayload) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [values, setValues] = useState<CreateEmergencyContactPayload>({
+    user_id: "",
+    name: "",
+    relationship: "",
+    phone_number: "",
+    is_primary: false,
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      // POST /api/v1/admin/emergency-contacts/ requires the owner's user UUID.
+      await onSave(values);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to save emergency contact.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <p>Assign this emergency contact to an existing user account.</p>
+      <input
+        className="modal-input"
+        required
+        placeholder="User UUID"
+        value={values.user_id}
+        onChange={(event) =>
+          setValues({ ...values, user_id: event.target.value })
+        }
+      />
+      <div className="modal-form-grid">
+        <input
+          className="modal-input"
+          required
+          placeholder="Contact name"
+          value={values.name}
+          onChange={(event) =>
+            setValues({ ...values, name: event.target.value })
+          }
+        />
+        <input
+          className="modal-input"
+          required
+          placeholder="Phone number"
+          value={values.phone_number}
+          onChange={(event) =>
+            setValues({ ...values, phone_number: event.target.value })
+          }
+        />
+      </div>
+      <input
+        className="modal-input"
+        required
+        placeholder="Relationship, e.g. Mother"
+        value={values.relationship}
+        onChange={(event) =>
+          setValues({ ...values, relationship: event.target.value })
+        }
+      />
+      <label>
+        <input
+          type="checkbox"
+          checked={values.is_primary}
+          onChange={(event) =>
+            setValues({ ...values, is_primary: event.target.checked })
+          }
+        />{" "}
+        Primary emergency contact
+      </label>
+      {error ? (
+        <p className="loading-state" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="modal-actions">
+        <button type="button" onClick={onCancel} disabled={saving}>
+          Cancel
+        </button>
+        <button type="submit" className="primary" disabled={saving}>
+          {saving ? "Saving..." : "Save Contact"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function HospitalForm({
+  onSave,
+  onCancel,
+}: {
+  onSave: (payload: CreateHospitalPayload) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [values, setValues] = useState({
+    name: "",
+    address: "",
+    phone: "",
+    latitude: "",
+    longitude: "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const payload: CreateHospitalPayload = {
+        name: values.name.trim(),
+        address: values.address.trim(),
+        // Match the required `phone` key in POST /api/v1/admin/hospitals/.
+        phone: values.phone.trim(),
+        ...(values.latitude.trim()
+          ? { latitude: Number(values.latitude) }
+          : {}),
+        ...(values.longitude.trim()
+          ? { longitude: Number(values.longitude) }
+          : {}),
+      };
+      await onSave(payload);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Unable to add hospital.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="hospital-form" onSubmit={submit}>
+      <p className="hospital-form-intro">
+        Add a hospital or healthcare facility to the directory.
+      </p>
+      <div className="hospital-form-section">
+        <span className="hospital-form-section-title">
+          Hospital Information
+        </span>
+        <label>
+          Hospital Name <b>*</b>
+          <span className="field-with-icon">
+            <Hospital />
+            <input
+              required
+              placeholder="Enter hospital name"
+              value={values.name}
+              onChange={(event) =>
+                setValues({ ...values, name: event.target.value })
+              }
+            />
+          </span>
+        </label>
+        <label>
+          Address <b>*</b>
+          <span className="field-with-icon field-with-icon-textarea">
+            <MapPin />
+            <textarea
+              required
+              placeholder="Enter hospital address"
+              value={values.address}
+              onChange={(event) =>
+                setValues({ ...values, address: event.target.value })
+              }
+            />
+          </span>
+        </label>
+        <label>
+          Phone Number <b>*</b>
+          <span className="field-with-icon">
+            <Phone />
+            <input
+              required
+              type="tel"
+              placeholder="+251 9XX XXX XXX"
+              value={values.phone}
+              onChange={(event) =>
+                setValues({ ...values, phone: event.target.value })
+              }
+            />
+          </span>
+        </label>
+      </div>
+      <div className="hospital-form-section coordinates-section">
+        <span className="hospital-form-section-title">
+          Location Coordinates
+        </span>
+        <small>
+          Optional - used to accurately display the hospital location
+        </small>
+        <div className="hospital-coordinate-grid">
+          <label>
+            Latitude
+            <span className="field-with-icon">
+              <Crosshair />
+              <input
+                type="number"
+                step="any"
+                placeholder="e.g. 9.0320"
+                value={values.latitude}
+                onChange={(event) =>
+                  setValues({ ...values, latitude: event.target.value })
+                }
+              />
+            </span>
+          </label>
+          <label>
+            Longitude
+            <span className="field-with-icon">
+              <Crosshair />
+              <input
+                type="number"
+                step="any"
+                placeholder="e.g. 38.7469"
+                value={values.longitude}
+                onChange={(event) =>
+                  setValues({ ...values, longitude: event.target.value })
+                }
+              />
+            </span>
+          </label>
+        </div>
+        <p className="coordinate-note">
+          <Crosshair /> You can leave the coordinates empty if they are unknown.
+        </p>
+      </div>
+      {error ? (
+        <p className="loading-state" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="modal-actions">
+        <button type="button" onClick={onCancel} disabled={saving}>
+          Cancel
+        </button>
+        <button type="submit" className="primary" disabled={saving}>
+          <CirclePlus /> {saving ? "Adding..." : "Add Hospital"}
+        </button>
+      </div>
+    </form>
   );
 }
 
 function TableView({
   type,
   onMidwife,
+  onAdd,
+  refreshKey = 0,
 }: {
   type: string;
   onMidwife?: (status: string) => void;
+  onAdd?: () => void;
+  refreshKey?: number;
 }) {
   const isHospitals = type === "Hospitals";
   const isMidwives = type === "Midwives";
@@ -1284,7 +1862,7 @@ function TableView({
     if (isHospitals) return getHospitals();
     if (isMidwives) return getMidwives();
     return getUsers();
-  }, [type]);
+  }, [type, refreshKey]);
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -1334,7 +1912,7 @@ function TableView({
             .
           </p>
         </div>
-        <button className="primary">
+        <button type="button" className="primary" onClick={onAdd}>
           + Add{" "}
           {isHospitals ? "Hospital" : type === "Midwives" ? "Midwife" : "User"}
         </button>
@@ -1350,25 +1928,30 @@ function TableView({
             }
           />
         </label>
-        <label>
-          Status
-          <select>
-            <option>All Statuses</option>
-            <option>Active</option>
-            <option>Pending</option>
-          </select>
-        </label>
-        <label>
-          Location
-          <select>
-            <option>All Locations</option>
-            <option>Addis Ababa</option>
-          </select>
-        </label>
-        <label className="date-filter">
-          Registration Date
-          <input placeholder="mm/dd/yyyy" />
-        </label>
+        {/* Users only need search; hospital directory keeps its additional filters. */}
+        {isHospitals ? (
+          <>
+            <label>
+              Status
+              <select>
+                <option>All Statuses</option>
+                <option>Active</option>
+                <option>Pending</option>
+              </select>
+            </label>
+            <label>
+              Location
+              <select>
+                <option>All Locations</option>
+                <option>Addis Ababa</option>
+              </select>
+            </label>
+            <label className="date-filter">
+              Registration Date
+              <input placeholder="mm/dd/yyyy" />
+            </label>
+          </>
+        ) : null}
       </div>
       <div className="table-wrap">
         <table>
@@ -1470,49 +2053,106 @@ export default function AdminDashboard({
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<string | null>(null);
   const [notice, setNotice] = useState(false);
+  const [accountForm, setAccountForm] = useState<AccountFormVariant | null>(
+    null,
+  );
+  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [contactsVersion, setContactsVersion] = useState(0);
+  const [hospitalsVersion, setHospitalsVersion] = useState(0);
+
+  async function submitAccountForm(
+    variant: AccountFormVariant,
+    values: AccountFormValues,
+  ) {
+    if (variant === "user") {
+      await createUserAccount(values);
+      setActive("Users");
+    } else if (variant === "midwife") {
+      await createMidwifeAccount(values);
+      setActive("Midwives");
+    } else {
+      await createAdminAccount(values);
+      setActive("Administration");
+    }
+    setAccountForm(null);
+  }
+
+  async function saveEmergencyContact(payload: CreateEmergencyContactPayload) {
+    await createEmergencyContact(payload);
+    // Refresh the contacts query after a successful POST.
+    setContactsVersion((version) => version + 1);
+    setModal(null);
+  }
+
+  async function saveHospital(payload: CreateHospitalPayload) {
+    await createHospital(payload);
+    setHospitalsVersion((version) => version + 1);
+    setModal(null);
+  }
 
   if (!user) {
     return <LoadingState label="Loading account..." />;
   }
 
-  const content =
-    active === "Dashboard" ? (
-      <Dashboard />
-    ) : active === "Midwives" ? (
-      <MidwivesView />
-    ) : active === "Health" ? (
-      <HealthView onAddContent={() => setModal("content")} />
-    ) : active === "Analytics" ? (
-      <AnalyticsView />
-    ) : active === "Feedback" ? (
-      <FeedbackView />
-    ) : active === "Consultations" ? (
-      <ConsultationsView />
-    ) : active === "Appointments" ? (
-      <AppointmentsView />
-    ) : active === "Services" ? (
-      <ServicesView onAddCategory={() => setModal("category")} />
-    ) : active === "Emergency Contacts" ? (
-      <EmergencyContactsView onAddContact={() => setModal("contact")} />
-    ) : active === "Settings" ? (
-      <SettingsView
-        onAdministration={() => setActive("Administration")}
-        user={user}
-      />
-    ) : active === "Administration" ? (
-      <AdministrationView />
-    ) : (
-      <TableView
-        type={
-          active === "Midwives"
-            ? "Midwives"
+  const content = accountForm ? (
+    <AccountFormPage
+      variant={accountForm}
+      onBack={() => setAccountForm(null)}
+      onSubmit={(values) => submitAccountForm(accountForm, values)}
+    />
+  ) : active === "Dashboard" ? (
+    <Dashboard />
+  ) : active === "Midwives" ? (
+    <MidwivesView onAddMidwife={() => setAccountForm("midwife")} />
+  ) : active === "Health" ? (
+    <HealthView onAddContent={() => setModal("content")} />
+  ) : active === "Analytics" ? (
+    <AnalyticsView />
+  ) : active === "Feedback" ? (
+    <FeedbackView />
+  ) : active === "Consultations" ? (
+    <ConsultationsView />
+  ) : active === "Appointments" ? (
+    <AppointmentsView />
+  ) : active === "Services" ? (
+    <ServicesView onAddCategory={() => setModal("category")} />
+  ) : active === "Emergency Contacts" ? (
+    <EmergencyContactsView
+      onAddContact={() => setModal("contact")}
+      refreshKey={contactsVersion}
+    />
+  ) : active === "Settings" ? (
+    <SettingsView
+      onAdministration={() => setActive("Administration")}
+      user={user}
+    />
+  ) : active === "Administration" ? (
+    <AdministrationView
+      onAddAdmin={() => setAccountForm("admin")}
+      onOpenAdministrators={() => setShowAddAdminModal(true)}
+    />
+  ) : (
+    <TableView
+      type={
+        active === "Midwives"
+          ? "Midwives"
+          : active === "Hospitals"
+            ? "Hospitals"
+            : "Users"
+      }
+      onMidwife={active === "Midwives" ? setModal : undefined}
+      onAdd={
+        active === "Users"
+          ? () => setAccountForm("user")
+          : active === "Midwives"
+            ? () => setAccountForm("midwife")
             : active === "Hospitals"
-              ? "Hospitals"
-              : "Users"
-        }
-        onMidwife={active === "Midwives" ? setModal : undefined}
-      />
-    );
+              ? () => setModal("hospital")
+              : undefined
+      }
+      refreshKey={hospitalsVersion}
+    />
+  );
   return (
     <>
       <AdminShell
@@ -1537,6 +2177,14 @@ export default function AdminDashboard({
       >
         {content}
       </AdminShell>
+      {showAddAdminModal && (
+        <AccountFormModal
+          onClose={() => setShowAddAdminModal(false)}
+          onSubmit={async (values) => {
+            await createAdminAccount(values);
+          }}
+        />
+      )}
       {notice && (
         <Modal title="Create Notification" onClose={() => setNotice(false)}>
           <p>Notification Title</p>
@@ -1572,14 +2220,21 @@ export default function AdminDashboard({
                 ? "Add Health Service Category"
                 : modal === "contact"
                   ? "Add Emergency Contact"
-                  : modal === "content"
-                    ? "Add New Information"
-                    : "Consultation Report"
+                  : modal === "hospital"
+                    ? "Add Hospital"
+                    : modal === "content"
+                      ? "Add New Information"
+                      : "Consultation Report"
           }
           danger={modal === "Pending"}
           onClose={() => setModal(null)}
         >
-          {modal === "Pending" ? (
+          {modal === "hospital" ? (
+            <HospitalForm
+              onSave={saveHospital}
+              onCancel={() => setModal(null)}
+            />
+          ) : modal === "Pending" ? (
             <>
               <p>
                 Review the submitted professional information for Hana Tesfaye.
@@ -1606,23 +2261,10 @@ export default function AdminDashboard({
                   />
                 </>
               ) : modal === "contact" ? (
-                <>
-                  <p>Service Information</p>
-                  <div className="modal-form-grid">
-                    <input
-                      className="modal-input"
-                      placeholder="e.g. Emergency Medical Services"
-                    />
-                    <input className="modal-input" placeholder="e.g. 911" />
-                  </div>
-                  <select className="modal-input">
-                    <option>Select region</option>
-                  </select>
-                  <textarea
-                    className="modal-input"
-                    placeholder="Provide additional information about this service..."
-                  />
-                </>
+                <EmergencyContactForm
+                  onSave={saveEmergencyContact}
+                  onCancel={() => setModal(null)}
+                />
               ) : modal === "upload" ? (
                 <>
                   <p>
@@ -1659,9 +2301,11 @@ export default function AdminDashboard({
               ) : (
                 <ConsultationReportView />
               )}
-              <div className="modal-actions">
-                <button onClick={() => setModal(null)}>Close</button>
-              </div>
+              {modal !== "contact" ? (
+                <div className="modal-actions">
+                  <button onClick={() => setModal(null)}>Close</button>
+                </div>
+              ) : null}
             </>
           )}
         </Modal>

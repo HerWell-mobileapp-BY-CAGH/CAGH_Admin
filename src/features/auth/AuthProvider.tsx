@@ -4,7 +4,7 @@ import { AuthContext, type AuthContextValue } from "./auth-context";
 import type { AdminUser } from "./types";
 import { clearTokens, getAccessToken } from "../../lib/api-client";
 
-const storageKey = "emma-admin-user";
+const storageKey = "cagh-admin-user";
 
 function readStoredUser(): AdminUser | null {
   try {

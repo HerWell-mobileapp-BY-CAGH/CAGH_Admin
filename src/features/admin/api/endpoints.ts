@@ -20,9 +20,11 @@ export const adminEndpoints = {
   midwifeStats: (id: string) => `/admin/midwives/${id}/stats/`,
   // Public/readable directory endpoint used for the hospital total card.
   hospitalsDirectory: "/midwives/hospitals/",
-  users: "/users",
-  midwives: "/midwives",
-  hospitals: "/hospitals",
+  // Admin-only directory endpoints provided by the Django backend.
+  users: "/admin/users/",
+  hospitals: "/admin/hospitals/",
+  // The signed-in administrator's persisted dashboard language preference.
+  languagePreference: "/admin/language/",
   consultations: "/consultations",
   consultationStats: "/consultations/stats",
   appointments: "/appointments",
@@ -30,7 +32,7 @@ export const adminEndpoints = {
   feedbackSummary: "/feedback/summary",
   healthContent: "/health-content",
   services: "/services",
-  emergencyContacts: "/emergency-contacts",
+  emergencyContacts: "/admin/emergency-contacts/",
   analytics: "/analytics",
   consultationReport: "/consultations/report",
 } as const;

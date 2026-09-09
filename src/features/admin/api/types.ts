@@ -1,3 +1,34 @@
+export type CreateAccountPayload = {
+  identifier: string;
+  password: string;
+};
+
+export type CreateAccountResponse = {
+  id: string;
+  message?: string;
+};
+
+export type CreateEmergencyContactPayload = {
+  user_id: string;
+  name: string;
+  relationship: string;
+  phone_number: string;
+  is_primary: boolean;
+};
+
+export type CreateHospitalPayload = {
+  name: string;
+  address: string;
+  // Django's Hospital model exposes this field as `phone`.
+  phone: string;
+  latitude?: number;
+  longitude?: number;
+};
+
+export type AdminLanguagePreference = {
+  preferred_language: "en" | "am";
+};
+
 export type PaginatedResponse<T> = {
   data: T[];
   total: number;
@@ -114,7 +145,10 @@ export type MidwifeApplication = {
   id: string;
   user: { id: string; username: string; email: string; phone_number?: string | null };
   hospital?: { id: string; name: string } | null;
-  license_number: string;
+  license_number: string | null;
+  bio: string;
+  languages: string;
+  cv_file_url: string | null;
   specialty: string;
   experience_years: number;
   verification_status: string;
@@ -123,6 +157,17 @@ export type MidwifeApplication = {
   created_at: string;
   qualifications: unknown[];
   certificates: unknown[];
+};
+
+/** Fields an administrator may supply or correct before approving a midwife. */
+export type UpdateMidwifeApplicationPayload = {
+  license_number?: string;
+  cv_file?: File;
+  hospital_id?: string;
+  bio?: string;
+  experience_years?: number;
+  specialty?: string;
+  languages?: string;
 };
 
 export type MidwifeReviewAction = "APPROVE" | "REJECT" | "SUSPEND";

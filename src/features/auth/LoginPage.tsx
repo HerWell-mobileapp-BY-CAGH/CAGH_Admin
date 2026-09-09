@@ -36,9 +36,9 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
-      <section className="login-brand-panel" aria-label="Emma Healthcare">
+      <section className="login-brand-panel" aria-label="CAGH Healthcare">
         <div className="login-brand">
-          <img src={logo} alt="Emma Healthcare logo" />
+          <img src={logo} alt="CAGH logo" />
         </div>
         <h1>
           Empowering better
@@ -46,7 +46,7 @@ export function LoginPage() {
           maternal healthcare.
         </h1>
         <footer>
-          <span>© 2026 Emma Healthcare Platform</span>
+          <span>© 2026 CAGH Healthcare Platform</span>
           <span>Privacy &nbsp;&nbsp; Terms</span>
         </footer>
       </section>
@@ -54,7 +54,7 @@ export function LoginPage() {
         <form className="login-form" onSubmit={handleSubmit} noValidate>
           <header>
             <h2>Welcome Back</h2>
-            <p>Sign in to manage the Emma healthcare platform.</p>
+            <p>Sign in to manage the CAGH healthcare platform.</p>
           </header>
           <label>
             Email address

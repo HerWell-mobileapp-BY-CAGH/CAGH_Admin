@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CheckCircle2,
   FileText,
   GraduationCap,
   Mail,
@@ -29,8 +28,7 @@ export interface PendingMidwife {
 interface ReviewMidwifeRegistrationDialogProps {
   midwife: PendingMidwife;
   onClose: () => void;
-  onApprove: () => void;
-  onReject: () => void;
+  onViewCv: () => void;
 }
 
 /**
@@ -40,8 +38,7 @@ interface ReviewMidwifeRegistrationDialogProps {
 export function ReviewMidwifeRegistrationDialog({
   midwife,
   onClose,
-  onApprove,
-  onReject,
+  onViewCv,
 }: ReviewMidwifeRegistrationDialogProps) {
   return (
     <div className="modal-backdrop">
@@ -120,23 +117,12 @@ export function ReviewMidwifeRegistrationDialog({
             <div className="cv-row">
               <FileText />
               <b>{midwife.cv}</b>
-              <button>View CV ↗</button>
+              <button type="button" onClick={onViewCv}>
+                View CV
+              </button>
             </div>
           </div>
         </div>
-        <footer className="review-footer">
-          <label>
-            <input type="checkbox" /> I have reviewed the submitted information
-          </label>
-          <div>
-            <button className="danger-outline" onClick={onReject}>
-              Reject
-            </button>
-            <button className="primary" onClick={onApprove}>
-              <CheckCircle2 /> Approve Midwife
-            </button>
-          </div>
-        </footer>
       </section>
     </div>
   );
