@@ -29,6 +29,23 @@ export type AdminLanguagePreference = {
   preferred_language: "en" | "am";
 };
 
+export type AdminProfile = {
+  id: string;
+  username: string | null;
+  email: string | null;
+  phone_number: string | null;
+  first_name: string;
+  last_name: string;
+  role: string;
+  profile: {
+    first_name: string;
+    last_name: string;
+    region: string;
+    city: string;
+    preferred_language: "en" | "am";
+  };
+};
+
 export type PaginatedResponse<T> = {
   data: T[];
   total: number;
@@ -37,6 +54,7 @@ export type PaginatedResponse<T> = {
 export type DirectoryRecord = {
   id: string;
   name: string;
+  email?: string;
   contact: string;
   location: string;
   status: string;
@@ -157,6 +175,11 @@ export type MidwifeApplication = {
   created_at: string;
   qualifications: unknown[];
   certificates: unknown[];
+  review_actions?: Array<{
+    action: MidwifeReviewAction;
+    requires_reason: boolean;
+    review_url: string;
+  }>;
 };
 
 /** Fields an administrator may supply or correct before approving a midwife. */

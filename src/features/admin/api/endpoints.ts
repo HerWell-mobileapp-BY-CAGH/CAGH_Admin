@@ -23,11 +23,12 @@ export const adminEndpoints = {
   // Admin-only directory endpoints provided by the Django backend.
   users: "/admin/users/",
   hospitals: "/admin/hospitals/",
+  profile: "/admin/profile/",
   // The signed-in administrator's persisted dashboard language preference.
   languagePreference: "/admin/language/",
-  consultations: "/consultations",
+  consultations: "/admin/consultations/",
   consultationStats: "/consultations/stats",
-  appointments: "/appointments",
+  appointments: "/admin/appointments/",
   feedback: "/feedback",
   feedbackSummary: "/feedback/summary",
   healthContent: "/health-content",

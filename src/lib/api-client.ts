@@ -33,6 +33,9 @@ async function refreshAccessToken() {
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,
   headers: { "Content-Type": "application/json" },
+  // Required for Django to retain the language-selection cookie when the
+  // Vite dashboard and API use different localhost ports.
+  withCredentials: true,
 });
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {

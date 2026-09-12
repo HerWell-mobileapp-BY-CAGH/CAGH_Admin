@@ -2,6 +2,7 @@ import { apiClient, getApiErrorMessage } from "../../../lib/api-client";
 import { adminEndpoints } from "./endpoints";
 import type {
   AdminDashboardResponse,
+  AdminProfile,
   AdminLanguagePreference,
   AnalyticsOverview,
   ConsultationReport,
@@ -44,6 +45,19 @@ export function getAdminLanguagePreference() {
     adminEndpoints.languagePreference,
     "Unable to load the administrator language preference.",
   );
+}
+
+export function getAdminProfile() {
+  return get<AdminProfile>(adminEndpoints.profile, "Unable to load the administrator profile.");
+}
+
+export async function updateAdminProfile(payload: Partial<AdminProfile>) {
+  try {
+    const response = await apiClient.patch<AdminProfile>(adminEndpoints.profile, payload);
+    return response.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, "Unable to save the administrator profile."));
+  }
 }
 
 /** Persists the selected dashboard language (`en` or `am`) for this admin. */
@@ -162,6 +176,43 @@ type BackendEmergencyContact = {
   is_primary: boolean;
 };
 
+type BackendUserSummary = {
+  username?: string | null;
+  email?: string | null;
+  first_name?: string;
+  last_name?: string;
+  profile?: { first_name?: string; last_name?: string } | null;
+};
+
+type BackendAppointment = {
+  id: string;
+  appointment_number: string;
+  scheduled_date: string;
+  appointment_type: string;
+  status: string;
+  user_detail: BackendUserSummary;
+  midwife_detail?: { user?: BackendUserSummary } | null;
+};
+
+type BackendConsultation = {
+  id: string;
+  appointment: string;
+  consultation_type: string;
+  status: string;
+  created_at: string;
+  user_detail?: BackendUserSummary | null;
+  midwife_detail?: { user?: BackendUserSummary } | null;
+};
+
+function displayUser(user?: BackendUserSummary | null) {
+  const profile = user?.profile;
+  const name = [
+    profile?.first_name || user?.first_name,
+    profile?.last_name || user?.last_name,
+  ].filter(Boolean).join(" ");
+  return name || user?.username || user?.email || "Not specified";
+}
+
 async function getAdminUsers(role: "PATIENT" | "MIDWIFE") {
   try {
     const response = await apiClient.get<BackendPage<BackendUser>>(adminEndpoints.users, {
@@ -173,6 +224,7 @@ async function getAdminUsers(role: "PATIENT" | "MIDWIFE") {
       data: response.data.results.map((user) => ({
         id: user.id,
         name: [user.profile?.first_name, user.profile?.last_name].filter(Boolean).join(" ") || user.username || user.email || "Unnamed user",
+        email: user.email ?? undefined,
         contact: user.email || user.phone_number || "No contact information",
         location: [user.profile?.city, user.profile?.region].filter(Boolean).join(", ") || "Not specified",
         status: user.midwife_profile?.verification_status || "ACTIVE",
@@ -211,24 +263,42 @@ export function createHospital(payload: CreateHospitalPayload) {
 }
 
 export function getConsultations() {
-  return get<PaginatedResponse<TableRecord>>(
-    adminEndpoints.consultations,
-    "Unable to load consultations.",
-  );
+  return apiClient.get<BackendPage<BackendConsultation>>(adminEndpoints.consultations)
+    .then((response) => ({
+      total: response.data.count,
+      data: response.data.results.map((item) => ({
+        id: item.id,
+        cells: [item.id, item.consultation_type, displayUser(item.midwife_detail?.user), item.created_at, item.status, item.appointment],
+      })),
+    }) satisfies PaginatedResponse<TableRecord>)
+    .catch((error: unknown) => { throw new Error(getApiErrorMessage(error, "Unable to load consultations.")); });
 }
 
 export function getConsultationStats() {
-  return get<ConsultationStats>(
-    adminEndpoints.consultationStats,
-    "Unable to load consultation stats.",
-  );
+  return apiClient.get<BackendPage<BackendConsultation>>(adminEndpoints.consultations)
+    .then((response) => {
+      const records = response.data.results;
+      const stats: ConsultationStats = {
+        anonymous: records.filter((item) => !item.user_detail?.email).length,
+        messages: records.filter((item) => item.consultation_type === "IN_PERSON").length,
+        voice: records.filter((item) => item.consultation_type === "VIRTUAL_VOICE").length,
+        completed: records.filter((item) => item.status === "COMPLETED").length,
+      };
+      return stats;
+    })
+    .catch((error: unknown) => { throw new Error(getApiErrorMessage(error, "Unable to load consultation statistics.")); });
 }
 
 export function getAppointments() {
-  return get<PaginatedResponse<TableRecord>>(
-    adminEndpoints.appointments,
-    "Unable to load appointments.",
-  );
+  return apiClient.get<BackendPage<BackendAppointment>>(adminEndpoints.appointments)
+    .then((response) => ({
+      total: response.data.count,
+      data: response.data.results.map((item) => ({
+        id: item.id,
+        cells: [item.scheduled_date, displayUser(item.user_detail), displayUser(item.midwife_detail?.user), item.appointment_type, item.status, item.appointment_number],
+      })),
+    }) satisfies PaginatedResponse<TableRecord>)
+    .catch((error: unknown) => { throw new Error(getApiErrorMessage(error, "Unable to load appointments.")); });
 }
 
 export function getFeedback() {

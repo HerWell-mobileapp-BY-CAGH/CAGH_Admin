@@ -4,7 +4,13 @@
  * This module contains the interactive admin dashboard. It is a client module
  * because navigation, filters, dialogs, and form controls all need React state.
  */
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import logo from "../assets/logo.jpg";
 import {
   createAdminAccount,
@@ -13,6 +19,7 @@ import {
   createMidwifeAccount,
   createUserAccount,
   getAdminLanguagePreference,
+  getAdminProfile,
   getAnalytics,
   getAdminDashboard,
   getAppointments,
@@ -32,6 +39,7 @@ import {
   getServices,
   getUsers,
   updateAdminLanguagePreference,
+  updateAdminProfile,
 } from "../features/admin/api/admin-api";
 import type {
   DirectoryRecord,
@@ -88,6 +96,7 @@ import {
   MapPin,
   Phone,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 
 function getInitials(name: string) {
   return name
@@ -499,9 +508,6 @@ function Dashboard() {
     consultations: dashboard.totals.consultations,
   };
   function exportDashboard() {
-    // Export the same live totals and activity rows currently shown on screen.
-    const escapeCsv = (value: string | number) =>
-      `"${String(value).replaceAll('"', '""')}"`;
     const rows = [
       ["Metric", "Value"],
       ["Total users", stats.totalUsers],
@@ -515,25 +521,15 @@ function Dashboard() {
         appointment.label,
         appointment.count,
       ]),
-      [],
-      ["Activity", "Performed by", "Timestamp"],
-      ...dashboard.recent_activities.map((item) => [
-        item.action,
-        item.performed_by ?? "System",
-        item.timestamp,
-      ]),
     ];
-    const csv = rows
-      .map((row) => row.map((cell) => escapeCsv(cell ?? "")).join(","))
-      .join("\n");
-    const url = URL.createObjectURL(
-      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    worksheet["!cols"] = [{ wch: 24 }, { wch: 16 }];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Dashboard");
+    XLSX.writeFile(
+      workbook,
+      `cagh-dashboard-${new Date().toISOString().slice(0, 10)}.xlsx`,
     );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `cagh-dashboard-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
   }
   return (
     <>
@@ -977,9 +973,11 @@ function EmergencyContactsView({
 }
 function SettingsView({
   onAdministration,
+  onProfile,
   user,
 }: {
   onAdministration: () => void;
+  onProfile: () => void;
   user: AdminUser;
 }) {
   // Read the persisted preference so the selected radio survives a refresh.
@@ -989,7 +987,13 @@ function SettingsView({
   const [savedLanguage, setSavedLanguage] = useState<
     AdminLanguagePreference["preferred_language"] | null
   >(null);
-  const language = savedLanguage ?? languageQuery.data?.preferred_language ?? "en";
+  const language =
+    savedLanguage ?? languageQuery.data?.preferred_language ?? "en";
+
+  useEffect(() => {
+    // Keep the document metadata in sync when the server preference loads.
+    document.documentElement.lang = language;
+  }, [language]);
 
   async function changeLanguage(
     preferredLanguage: AdminLanguagePreference["preferred_language"],
@@ -998,10 +1002,19 @@ function SettingsView({
     setSavingLanguage(true);
     try {
       // PATCH /api/v1/admin/language/ updates only the active administrator.
-      const updatedPreference = await updateAdminLanguagePreference(preferredLanguage);
+      const updatedPreference =
+        await updateAdminLanguagePreference(preferredLanguage);
       // Reflect the accepted backend value immediately; the next page load
       // will retrieve the same value through GET /admin/language/.
       setSavedLanguage(updatedPreference.preferred_language);
+      // Apply the document language as well as persisting the API preference.
+      // This makes the setting available to screen readers and future i18n UI
+      // messages without requiring an extra page reload.
+      document.documentElement.lang = updatedPreference.preferred_language;
+      window.localStorage.setItem(
+        "admin_language",
+        updatedPreference.preferred_language,
+      );
     } catch (cause) {
       setLanguageError(
         cause instanceof Error ? cause.message : "Unable to save language.",
@@ -1031,7 +1044,11 @@ function SettingsView({
               className="setting-item"
               key={title}
               onClick={
-                title === "Administration" ? onAdministration : undefined
+                title === "Administration"
+                  ? onAdministration
+                  : title === "Profile"
+                    ? onProfile
+                    : undefined
               }
             >
               <span className="setting-icon">
@@ -1085,6 +1102,8 @@ function SettingsView({
               </span>
               {languageError ? (
                 <small role="alert">{languageError}</small>
+              ) : savingLanguage ? (
+                <small role="status">Saving language preference…</small>
               ) : null}
             </span>
           </fieldset>
@@ -1113,6 +1132,59 @@ function SettingsView({
       </div>
     </>
   );
+}
+
+function AdminProfileView({ onBack }: { onBack: () => void }) {
+  const profileQuery = useAsyncData(getAdminProfile, []);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  if (profileQuery.loading) return <LoadingState label="Loading administrator profile..." />;
+  if (profileQuery.error || !profileQuery.data) {
+    return <ErrorState message={profileQuery.error ?? "Unable to load the administrator profile."} />;
+  }
+
+  const profile = profileQuery.data;
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    const values = new FormData(event.currentTarget);
+    try {
+      await updateAdminProfile({
+        username: String(values.get("username") ?? ""),
+        email: String(values.get("email") ?? ""),
+        phone_number: String(values.get("phone_number") ?? ""),
+        profile: {
+          ...profile.profile,
+          first_name: String(values.get("first_name") ?? ""),
+          last_name: String(values.get("last_name") ?? ""),
+          city: String(values.get("city") ?? ""),
+          region: String(values.get("region") ?? ""),
+        },
+      });
+      setMessage("Profile updated successfully.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Unable to save the administrator profile.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <>
+    <PageHeader title="My Profile" subtitle="Update your administrator account information." actions={<button className="outline" onClick={onBack}>Back to settings</button>} />
+    <form className="panel data-panel" onSubmit={save}>
+      <div className="modal-field"><b>Username</b><input className="modal-input" name="username" defaultValue={profile.username ?? ""} /></div>
+      <div className="modal-field"><b>Email</b><input className="modal-input" type="email" name="email" defaultValue={profile.email ?? ""} /></div>
+      <div className="modal-field"><b>Phone number</b><input className="modal-input" name="phone_number" defaultValue={profile.phone_number ?? ""} /></div>
+      <div className="modal-field"><b>First name</b><input className="modal-input" name="first_name" defaultValue={profile.profile.first_name || profile.first_name} /></div>
+      <div className="modal-field"><b>Last name</b><input className="modal-input" name="last_name" defaultValue={profile.profile.last_name || profile.last_name} /></div>
+      <div className="modal-field"><b>City</b><input className="modal-input" name="city" defaultValue={profile.profile.city ?? ""} /></div>
+      <div className="modal-field"><b>Region</b><input className="modal-input" name="region" defaultValue={profile.profile.region ?? ""} /></div>
+      {message ? <p role="status">{message}</p> : null}
+      <div className="modal-actions"><button className="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save profile"}</button></div>
+    </form>
+  </>;
 }
 function AdministrationView({
   onAddAdmin,
@@ -1385,7 +1457,9 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
         : "Not provided",
       experience: `${application.experience_years} years`,
       registered: application.created_at,
-      cv: application.cv_file_url ? "CV attached to application" : "No CV uploaded",
+      cv: application.cv_file_url
+        ? "CV attached to application"
+        : "No CV uploaded",
     };
   }
 
@@ -1445,7 +1519,10 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
       setReviewingApplication(null);
       setViewingCvApplication(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to approve this application.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to approve this application.";
       setMessage(message);
       // The CV dialog keeps open and displays this same error beside its form.
       throw new Error(message);
@@ -1457,7 +1534,15 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
   if (applicationsQuery.loading || hospitalsQuery.loading)
     return <LoadingState label="Loading midwife applications..." />;
   if (applicationsQuery.error || hospitalsQuery.error)
-    return <ErrorState message={applicationsQuery.error ?? hospitalsQuery.error ?? "Unable to load midwife applications."} />;
+    return (
+      <ErrorState
+        message={
+          applicationsQuery.error ??
+          hospitalsQuery.error ??
+          "Unable to load midwife applications."
+        }
+      />
+    );
 
   return (
     <>
@@ -1545,6 +1630,14 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
           midwife={toPendingMidwife(reviewingApplication)}
           onClose={() => setReviewingApplication(null)}
           onViewCv={() => setViewingCvApplication(reviewingApplication)}
+          onApprove={() => {
+            setViewingCvApplication(reviewingApplication);
+            setReviewingApplication(null);
+          }}
+          onReject={() => {
+            setRejectingApplication(reviewingApplication);
+            setReviewingApplication(null);
+          }}
         />
       ) : null}
       {viewingCvApplication ? (
@@ -1959,7 +2052,9 @@ function TableView({
             <tr>
               {(isHospitals
                 ? ["Hospital", "Location", "Midwives", "Status", "Actions"]
-                : ["User", "Contact", "Location", "Status", "Action"]
+                : isMidwives
+                  ? ["Email", "Location", "Status", "Action"]
+                  : ["User", "Contact", "Location", "Status", "Action"]
               ).map((h) => (
                 <th key={h}>{h}</th>
               ))}
@@ -1976,7 +2071,6 @@ function TableView({
                         </div>
                         <div>
                           <b>{record.name}</b>
-                          <small>ID: {record.id}</small>
                         </div>
                       </div>
                     </td>
@@ -2000,23 +2094,34 @@ function TableView({
                     onClick={() => isMidwives && onMidwife?.(record.status)}
                   >
                     <td>
-                      <div className="table-person">
-                        <div className="mini-avatar">
-                          {getInitials(record.name)}
+                      {isMidwives ? (
+                        <div className="table-person">
+                          <b>{record.email ?? "No email provided"}</b>
                         </div>
-                        <div>
-                          <b>{record.name}</b>
-                          <small>ID: {record.id}</small>
+                      ) : (
+                        <div className="table-person">
+                          <div className="mini-avatar">
+                            {getInitials(record.name)}
+                          </div>
+                          <div>
+                            <b>{record.name}</b>
+                            <small>ID: {record.id}</small>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </td>
-                    <td>{record.contact}</td>
+                    {!isMidwives ? <td>{record.contact}</td> : null}
                     <td>{record.location}</td>
                     <td>
                       <span className={`status ${record.status.toLowerCase()}`}>
                         {record.status}
                       </span>
                     </td>
+                    {isMidwives ? (
+                      <td>
+                        <MoreVertical />
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
           </tbody>
@@ -2059,6 +2164,7 @@ export default function AdminDashboard({
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
   const [contactsVersion, setContactsVersion] = useState(0);
   const [hospitalsVersion, setHospitalsVersion] = useState(0);
+  const [midwivesVersion, setMidwivesVersion] = useState(0);
 
   async function submitAccountForm(
     variant: AccountFormVariant,
@@ -2069,6 +2175,7 @@ export default function AdminDashboard({
       setActive("Users");
     } else if (variant === "midwife") {
       await createMidwifeAccount(values);
+      setMidwivesVersion((version) => version + 1);
       setActive("Midwives");
     } else {
       await createAdminAccount(values);
@@ -2124,8 +2231,11 @@ export default function AdminDashboard({
   ) : active === "Settings" ? (
     <SettingsView
       onAdministration={() => setActive("Administration")}
+      onProfile={() => setActive("Profile")}
       user={user}
     />
+  ) : active === "Profile" ? (
+    <AdminProfileView onBack={() => setActive("Settings")} />
   ) : active === "Administration" ? (
     <AdministrationView
       onAddAdmin={() => setAccountForm("admin")}
@@ -2150,7 +2260,7 @@ export default function AdminDashboard({
               ? () => setModal("hospital")
               : undefined
       }
-      refreshKey={hospitalsVersion}
+      refreshKey={active === "Midwives" ? midwivesVersion : hospitalsVersion}
     />
   );
   return (

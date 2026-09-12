@@ -29,6 +29,8 @@ interface ReviewMidwifeRegistrationDialogProps {
   midwife: PendingMidwife;
   onClose: () => void;
   onViewCv: () => void;
+  onApprove: () => void;
+  onReject: () => void;
 }
 
 /**
@@ -39,6 +41,8 @@ export function ReviewMidwifeRegistrationDialog({
   midwife,
   onClose,
   onViewCv,
+  onApprove,
+  onReject,
 }: ReviewMidwifeRegistrationDialogProps) {
   return (
     <div className="modal-backdrop">
@@ -123,6 +127,12 @@ export function ReviewMidwifeRegistrationDialog({
             </div>
           </div>
         </div>
+        <footer className="modal-actions">
+          <button type="button" onClick={onReject}>Reject</button>
+          <button type="button" className="primary" onClick={onApprove}>
+            Review CV &amp; Approve
+          </button>
+        </footer>
       </section>
     </div>
   );
