@@ -1,0 +1,106 @@
+.suspend-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.suspend-modal header h2 {
+  color: #dc3545;
+}
+
+.suspend-modal header h2 svg,
+.suspend-modal .danger svg {
+  width: 18px;
+  height: 18px;
+}
+
+.suspend-content {
+  padding: 20px;
+}
+
+.suspend-content > p {
+  margin: 0 0 16px;
+  color: var(--foreground);
+  line-height: 1.5;
+}
+
+.suspend-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #f1d9dc;
+  border-radius: 7px;
+  background: #fff8f8;
+}
+
+.suspend-identity > div:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.suspend-identity span,
+.suspend-identity em,
+.suspend-content > small {
+  color: #687068;
+  font-size: 12px;
+}
+
+.suspend-identity em {
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: #e7f0e7;
+  color: #196322;
+  font-style: normal;
+}
+
+.suspend-modal .modal-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.suspend-modal .modal-field b {
+  color: #596059;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+
+.suspend-modal .modal-field sup {
+  color: #dc3545;
+}
+
+.suspend-modal textarea {
+  min-height: 78px;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.suspend-modal .modal-actions {
+  border-top: 1px solid var(--border);
+}
+
+.suspend-modal .danger,
+.suspend-action {
+  border-color: #0d98ba;
+  color: #0d98ba;
+}
+
+.suspend-modal .danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #0d98ba;
+  color: #fff;
+}
+
+.suspend-modal .danger:hover,
+.suspend-action:hover {
+  border-color: #0b7894;
+  background: #0b7894;
+  color: #fff;
+}
+
+.suspend-action {
+  background: transparent;
+}

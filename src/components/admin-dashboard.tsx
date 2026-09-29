@@ -18,9 +18,9 @@ import {
   createHospital,
   createMidwifeAccount,
   createUserAccount,
+  changeAdminPassword,
   getAdminLanguagePreference,
   getAdminProfile,
-  getAnalytics,
   getAdminDashboard,
   getAppointments,
   getConsultationReport,
@@ -28,6 +28,7 @@ import {
   getConsultations,
   getEmergencyContacts,
   getFeedback,
+  getFeedbackForMidwife,
   getFeedbackSummary,
   getHealthContent,
   getHospitalCount,
@@ -64,20 +65,21 @@ import {
   type PendingMidwife,
 } from "./dialogue/midwife_review";
 import { RejectMidwifeRegistrationDialog } from "./dialogue/midwife_reject";
+import { SuspendMidwifeDialog } from "./dialogue/midwife_suspend";
 import { MidwifeCvReviewDialog } from "./dialogue/midwife_cv_review";
 import type { AccountFormVariant } from "./forms/account-form-config";
 import type { AccountFormValues } from "./forms/account-form-config";
 import { StatCard } from "./ui/stat-card";
+import { LearningManagement } from "./learning/LearningManagement";
 import {
-  Activity,
   AlertTriangle,
-  BarChart3,
   Bell,
   CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
   FileText,
+  BookOpen,
   Grid2X2,
   Hospital,
   Inbox,
@@ -132,13 +134,11 @@ const navItems = [
   { label: "Hospitals", icon: Hospital },
   { label: "Consultations", icon: FileText },
   { label: "Appointments", icon: CalendarDays },
-  { label: "Health", icon: Activity },
+  { label: "Learning", icon: BookOpen },
 ];
 const manageItems = [
   { label: "Emergency Contacts", icon: ShieldCheck },
-  { label: "Services", icon: Stethoscope },
   { label: "Feedback", icon: AlertTriangle },
-  { label: "Analytics", icon: BarChart3 },
   { label: "Administration", icon: UserCog },
   { label: "Settings", icon: Settings },
 ];
@@ -407,36 +407,6 @@ function AppointmentsSummaryPanel({
   );
 }
 
-function ActivityPanel({
-  items,
-}: {
-  items: Array<{
-    title: string;
-    time: string;
-    description: string;
-    tag: string;
-  }>;
-}) {
-  return (
-    <div className="panel activity">
-      <div className="panel-header">
-        <h2>Recent Activity</h2>
-      </div>
-      {items.map((item) => (
-        <div className="activity-row" key={`${item.title}-${item.time}`}>
-          <i className={item.tag} />
-          <div>
-            <b>{item.title}</b>
-            <small>{item.description}</small>
-            <em>{item.tag}</em>
-          </div>
-          <span>{item.time}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function Dashboard() {
   // One authoritative request supplies the live dashboard totals, statuses,
   // and audited activity feed from GET /api/v1/admin/dashboard/.
@@ -492,12 +462,6 @@ function Dashboard() {
       kind: "cancelled",
     },
   ];
-  const activity = dashboard.recent_activities.map((item) => ({
-    title: item.action.replaceAll("_", " "),
-    description: item.performed_by ?? "System activity",
-    time: new Date(item.timestamp).toLocaleString(),
-    tag: "green",
-  }));
   const stats = {
     totalUsers: dashboard.totals.users,
     totalMidwives: dashboard.totals.midwives,
@@ -547,15 +511,23 @@ function Dashboard() {
         <GrowthChartPanel />
         <AppointmentsSummaryPanel appointments={appointments} />
       </section>
-      <section className="bottom-grid">
-        <ActivityPanel items={activity} />
-      </section>
     </>
   );
 }
 function FeedbackView() {
   const summaryQuery = useAsyncData(getFeedbackSummary, []);
   const feedbackQuery = useAsyncData(getFeedback, []);
+  const [feedbackPage, setFeedbackPage] = useState(1);
+  const feedback = feedbackQuery.data?.data ?? [];
+  const feedbackPageSize = 10;
+  const feedbackPageCount = Math.max(
+    1,
+    Math.ceil(feedback.length / feedbackPageSize),
+  );
+  const visibleFeedback = feedback.slice(
+    (feedbackPage - 1) * feedbackPageSize,
+    feedbackPage * feedbackPageSize,
+  );
 
   if (summaryQuery.loading || feedbackQuery.loading) {
     return <LoadingState label="Loading feedback..." />;
@@ -574,7 +546,7 @@ function FeedbackView() {
   }
 
   const summary = summaryQuery.data!;
-  const feedbackRows = toTableRows(feedbackQuery.data?.data ?? []);
+  const stars = (rating: number) => "★".repeat(rating) + "☆".repeat(5 - rating);
 
   return (
     <>
@@ -591,6 +563,10 @@ function FeedbackView() {
             {summary.averageRating} <span>/ {summary.maxRating}</span>
           </strong>
           <div className="stars">★★★★☆</div>
+          <small>
+            {summary.totalReviews} review{summary.totalReviews === 1 ? "" : "s"}{" "}
+            overall
+          </small>
           {summary.trend && <em>{summary.trend}</em>}
         </div>
         <div className="panel distribution">
@@ -609,7 +585,6 @@ function FeedbackView() {
       <div className="panel data-panel">
         <div className="panel-header">
           <h2>Recent Feedback</h2>
-          <a>Filter ���</a>
         </div>
         <div className="table-wrap">
           <table>
@@ -621,17 +596,49 @@ function FeedbackView() {
               </tr>
             </thead>
             <tbody>
-              {feedbackRows.map((row) => (
-                <tr key={row[0]}>
-                  {row.map((cell, i) => (
-                    <td key={cell} className={i === 1 ? "stars-cell" : ""}>
-                      {cell}
-                    </td>
-                  ))}
+              {visibleFeedback.map((review) => (
+                <tr key={review.id}>
+                  <td>
+                    <b>{review.midwifeName}</b>
+                    <small>{review.reviewerName}</small>
+                  </td>
+                  <td className="stars-cell">{stars(review.rating)}</td>
+                  <td>{new Date(review.createdAt).toLocaleDateString()}</td>
+                  <td>{review.comment || "No written feedback."}</td>
                 </tr>
               ))}
+              {!feedback.length ? (
+                <tr>
+                  <td colSpan={4}>No feedback has been submitted yet.</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
+          <div className="table-footer">
+            Showing{" "}
+            {feedback.length ? (feedbackPage - 1) * feedbackPageSize + 1 : 0} to{" "}
+            {Math.min(feedbackPage * feedbackPageSize, feedback.length)} of{" "}
+            {feedback.length} entries
+            <div>
+              <button
+                type="button"
+                disabled={feedbackPage === 1}
+                onClick={() => setFeedbackPage((current) => current - 1)}
+              >
+                Previous
+              </button>
+              <span className="table-page-indicator">
+                {feedbackPage} / {feedbackPageCount}
+              </span>
+              <button
+                type="button"
+                disabled={feedbackPage === feedbackPageCount}
+                onClick={() => setFeedbackPage((current) => current + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </>
@@ -702,6 +709,7 @@ function ConsultationsView() {
         title="Recent Activity"
         headers={["ID", "Type", "Midwife", "Date", "Status", "Actions"]}
         rows={consultationRows}
+        showToolbar={false}
         total={String(
           consultationsQuery.data?.total ?? consultationRows.length,
         )}
@@ -731,9 +739,10 @@ function AppointmentsView() {
         </div>
       </div>
       <DataTable
-        title="All   Booked   Completed   Cancelled   Rescheduled"
+        title="Appointments"
         headers={["Date", "User", "Midwife", "Type", "Status", "Actions"]}
         rows={appointmentRows}
+        showToolbar={false}
         total={`${appointmentsQuery.data?.total ?? appointmentRows.length} appointments`}
       />
     </>
@@ -830,21 +839,30 @@ function DataTable({
   headers,
   rows,
   total,
+  showToolbar = true,
 }: {
   title: string;
   headers: string[];
   rows: string[][];
   total: string;
+  showToolbar?: boolean;
 }) {
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const visibleRows = rows.slice((page - 1) * pageSize, page * pageSize);
+
   return (
     <div className="panel data-panel generic-table">
       <div className="panel-header">
         <h2>{title}</h2>
-        <div className="table-filters">
-          <button>All</button>
-          <button>Filter</button>
-          <button className="primary">Export</button>
-        </div>
+        {showToolbar ? (
+          <div className="table-filters">
+            <button>All</button>
+            <button>Filter</button>
+            <button className="primary">Export</button>
+          </div>
+        ) : null}
       </div>
       <div className="table-wrap">
         <table>
@@ -856,7 +874,7 @@ function DataTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
+            {visibleRows.map((row, i) => (
               <tr key={row[0] || i}>
                 {row.map((cell, j) => (
                   <td key={`${i}-${j}`}>
@@ -874,10 +892,26 @@ function DataTable({
           </tbody>
         </table>
         <div className="table-footer">
-          Showing 1 to {rows.length} of {total} entries{" "}
+          Showing {rows.length ? (page - 1) * pageSize + 1 : 0} to{" "}
+          {Math.min(page * pageSize, rows.length)} of {total} entries{" "}
           <div>
-            <button>Previous</button>
-            <button>Next</button>
+            <button
+              type="button"
+              disabled={page === 1}
+              onClick={() => setPage((current) => current - 1)}
+            >
+              Previous
+            </button>
+            <span className="table-page-indicator">
+              {page} / {pageCount}
+            </span>
+            <button
+              type="button"
+              disabled={page === pageCount}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
@@ -894,6 +928,7 @@ function EmergencyContactsView({
 }) {
   // Re-fetch after a successful create so the new contact appears immediately.
   const contactsQuery = useAsyncData(getEmergencyContacts, [refreshKey]);
+  const [page, setPage] = useState(1);
 
   if (contactsQuery.loading) {
     return <LoadingState label="Loading emergency contacts..." />;
@@ -905,6 +940,12 @@ function EmergencyContactsView({
 
   const emergencyRows = toTableRows(contactsQuery.data?.data ?? []);
   const total = contactsQuery.data?.total ?? emergencyRows.length;
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(emergencyRows.length / pageSize));
+  const visibleRows = emergencyRows.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
 
   return (
     <>
@@ -920,10 +961,6 @@ function EmergencyContactsView({
       <div className="panel data-panel directory">
         <div className="panel-header">
           <h2>Active Directory</h2>
-          <div className="table-filters">
-            <button>Filter</button>
-            <button>Export</button>
-          </div>
         </div>
         <div className="table-wrap">
           <table>
@@ -943,7 +980,7 @@ function EmergencyContactsView({
               </tr>
             </thead>
             <tbody>
-              {emergencyRows.map((row) => (
+              {visibleRows.map((row) => (
                 <tr key={row[0]}>
                   {row.map((cell, i) => (
                     <td key={cell}>
@@ -960,10 +997,26 @@ function EmergencyContactsView({
             </tbody>
           </table>
           <div className="table-footer">
-            Showing 1 to {emergencyRows.length} of {total} entries{" "}
+            Showing {emergencyRows.length ? (page - 1) * pageSize + 1 : 0} to{" "}
+            {Math.min(page * pageSize, emergencyRows.length)} of {total} entries{" "}
             <div>
-              <button>Prev</button>
-              <button>Next</button>
+              <button
+                type="button"
+                disabled={page === 1}
+                onClick={() => setPage((current) => current - 1)}
+              >
+                Previous
+              </button>
+              <span className="table-page-indicator">
+                {page} / {pageCount}
+              </span>
+              <button
+                type="button"
+                disabled={page === pageCount}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>
@@ -971,13 +1024,112 @@ function EmergencyContactsView({
     </>
   );
 }
+function PasswordChangeDialog({ onClose }: { onClose: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const oldPassword = String(form.get("old_password") ?? "");
+    const newPassword = String(form.get("new_password") ?? "");
+    const newPasswordConfirm = String(form.get("new_password_confirm") ?? "");
+    if (!oldPassword || !newPassword || !newPasswordConfirm) {
+      setError("Please complete all password fields.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("The new password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setError("New passwords do not match.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await changeAdminPassword({
+        oldPassword,
+        newPassword,
+        newPasswordConfirm,
+      });
+      onClose();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to change your password.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Change password" onClose={onClose}>
+      <form onSubmit={submit}>
+        <label className="modal-field">
+          Current password
+          <input
+            className="modal-input"
+            name="old_password"
+            type="password"
+            autoComplete="current-password"
+            required
+          />
+        </label>
+        <label className="modal-field">
+          New password
+          <input
+            className="modal-input"
+            name="new_password"
+            type="password"
+            minLength={8}
+            autoComplete="new-password"
+            required
+          />
+        </label>
+        <label className="modal-field">
+          Confirm new password
+          <input
+            className="modal-input"
+            name="new_password_confirm"
+            type="password"
+            minLength={8}
+            autoComplete="new-password"
+            required
+          />
+        </label>
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="modal-actions">
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="primary" type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Change password"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function SettingsView({
   onAdministration,
   onProfile,
+  onPassword,
+  onLogout,
   user,
 }: {
   onAdministration: () => void;
   onProfile: () => void;
+  onPassword: () => void;
+  onLogout: () => void;
   user: AdminUser;
 }) {
   // Read the persisted preference so the selected radio survives a refresh.
@@ -1062,7 +1214,7 @@ function SettingsView({
             </button>
           ))}
           <h2 className="section-label">SECURITY</h2>
-          <button className="setting-item">
+          <button className="setting-item" onClick={onPassword}>
             <span className="setting-icon">▣</span>
             <span>
               <b>Password</b>
@@ -1107,7 +1259,7 @@ function SettingsView({
               ) : null}
             </span>
           </fieldset>
-          <button className="logout settings-logout">
+          <button className="logout settings-logout" onClick={onLogout}>
             <LogOut />
             Log Out
           </button>
@@ -1139,9 +1291,16 @@ function AdminProfileView({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  if (profileQuery.loading) return <LoadingState label="Loading administrator profile..." />;
+  if (profileQuery.loading)
+    return <LoadingState label="Loading administrator profile..." />;
   if (profileQuery.error || !profileQuery.data) {
-    return <ErrorState message={profileQuery.error ?? "Unable to load the administrator profile."} />;
+    return (
+      <ErrorState
+        message={
+          profileQuery.error ?? "Unable to load the administrator profile."
+        }
+      />
+    );
   }
 
   const profile = profileQuery.data;
@@ -1165,26 +1324,94 @@ function AdminProfileView({ onBack }: { onBack: () => void }) {
       });
       setMessage("Profile updated successfully.");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Unable to save the administrator profile.");
+      setMessage(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to save the administrator profile.",
+      );
     } finally {
       setSaving(false);
     }
   }
 
-  return <>
-    <PageHeader title="My Profile" subtitle="Update your administrator account information." actions={<button className="outline" onClick={onBack}>Back to settings</button>} />
-    <form className="panel data-panel" onSubmit={save}>
-      <div className="modal-field"><b>Username</b><input className="modal-input" name="username" defaultValue={profile.username ?? ""} /></div>
-      <div className="modal-field"><b>Email</b><input className="modal-input" type="email" name="email" defaultValue={profile.email ?? ""} /></div>
-      <div className="modal-field"><b>Phone number</b><input className="modal-input" name="phone_number" defaultValue={profile.phone_number ?? ""} /></div>
-      <div className="modal-field"><b>First name</b><input className="modal-input" name="first_name" defaultValue={profile.profile.first_name || profile.first_name} /></div>
-      <div className="modal-field"><b>Last name</b><input className="modal-input" name="last_name" defaultValue={profile.profile.last_name || profile.last_name} /></div>
-      <div className="modal-field"><b>City</b><input className="modal-input" name="city" defaultValue={profile.profile.city ?? ""} /></div>
-      <div className="modal-field"><b>Region</b><input className="modal-input" name="region" defaultValue={profile.profile.region ?? ""} /></div>
-      {message ? <p role="status">{message}</p> : null}
-      <div className="modal-actions"><button className="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save profile"}</button></div>
-    </form>
-  </>;
+  return (
+    <>
+      <PageHeader
+        title="My Profile"
+        subtitle="Update your administrator account information."
+        actions={
+          <button className="outline" onClick={onBack}>
+            Back to settings
+          </button>
+        }
+      />
+      <form className="panel data-panel" onSubmit={save}>
+        <div className="modal-field">
+          <b>Username</b>
+          <input
+            className="modal-input"
+            name="username"
+            defaultValue={profile.username ?? ""}
+          />
+        </div>
+        <div className="modal-field">
+          <b>Email</b>
+          <input
+            className="modal-input"
+            type="email"
+            name="email"
+            defaultValue={profile.email ?? ""}
+          />
+        </div>
+        <div className="modal-field">
+          <b>Phone number</b>
+          <input
+            className="modal-input"
+            name="phone_number"
+            defaultValue={profile.phone_number ?? ""}
+          />
+        </div>
+        <div className="modal-field">
+          <b>First name</b>
+          <input
+            className="modal-input"
+            name="first_name"
+            defaultValue={profile.profile.first_name || profile.first_name}
+          />
+        </div>
+        <div className="modal-field">
+          <b>Last name</b>
+          <input
+            className="modal-input"
+            name="last_name"
+            defaultValue={profile.profile.last_name || profile.last_name}
+          />
+        </div>
+        <div className="modal-field">
+          <b>City</b>
+          <input
+            className="modal-input"
+            name="city"
+            defaultValue={profile.profile.city ?? ""}
+          />
+        </div>
+        <div className="modal-field">
+          <b>Region</b>
+          <input
+            className="modal-input"
+            name="region"
+            defaultValue={profile.profile.region ?? ""}
+          />
+        </div>
+        {message ? <p role="status">{message}</p> : null}
+        <div className="modal-actions">
+          <button className="primary" type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Save profile"}
+          </button>
+        </div>
+      </form>
+    </>
+  );
 }
 function AdministrationView({
   onAddAdmin,
@@ -1215,12 +1442,6 @@ function AdministrationView({
           <small>Manage admin accounts</small>
           <em>OPEN →</em>
         </button>
-        <button className="admin-tile">
-          <span>▣</span>
-          <b>ROLES &amp; PERMISSIONS</b>
-          <small>Control administrative access</small>
-          <em>OPEN →</em>
-        </button>
       </div>
     </>
   );
@@ -1242,7 +1463,7 @@ function Modal({
 }) {
   return (
     <div className="modal-backdrop">
-      <section className="modal">
+      <section className={`modal${title === "Add Hospital" ? " hospital-dialog" : ""}`}>
         <header>
           <h2 className={danger ? "danger-text" : ""}>{title}</h2>
           <button onClick={onClose} aria-label="Close">
@@ -1334,99 +1555,110 @@ function ConsultationReportView({ midwifeId }: { midwifeId?: string }) {
     </>
   );
 }
-function AnalyticsView() {
-  const analyticsQuery = useAsyncData(getAnalytics, []);
-
-  if (analyticsQuery.loading) {
-    return <LoadingState label="Loading analytics..." />;
-  }
-
-  if (analyticsQuery.error || !analyticsQuery.data) {
-    return (
-      <ErrorState
-        message={analyticsQuery.error ?? "Unable to load analytics."}
-      />
-    );
-  }
-
-  const analytics = analyticsQuery.data;
-  const performanceRows = toTableRows(analytics.midwifePerformance.data);
+/**
+ * Admin-only review queue backed by the real midwife application endpoints.
+ * Approval is immediate; rejecting and suspending require a reason.
+ */
+function MidwifeFeedbackDialog({
+  midwife,
+  onClose,
+}: {
+  midwife: DirectoryRecord;
+  onClose: () => void;
+}) {
+  const feedbackQuery = useAsyncData(
+    () => getFeedbackForMidwife(midwife.midwifeProfileId!),
+    [midwife.midwifeProfileId],
+  );
+  const [page, setPage] = useState(1);
+  const feedback = feedbackQuery.data?.data ?? [];
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(feedback.length / pageSize));
+  const visibleFeedback = feedback.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
 
   return (
-    <>
-      <div className="page-heading">
-        <div>
-          <h1>Consultation Reports</h1>
-          <p>Detailed consultation activity and midwife performance.</p>
-        </div>
-        <button className="primary">Export ↓</button>
-      </div>
-      <div className="filter-panel report-filters">
-        <label>
-          Date Range
-          <input value="Aug 01 – Aug 29, 2026" readOnly />
-        </label>
-        <label>
-          Hospital
-          <select>
-            <option>All Hospitals</option>
-          </select>
-        </label>
-        <label>
-          Midwife
-          <select>
-            <option>All Midwives</option>
-          </select>
-        </label>
-        <label>
-          Consultation Type
-          <select>
-            <option>All Types</option>
-          </select>
-        </label>
-      </div>
-      <section className="stats report-stats">
-        {analytics.stats.map(({ label, value }) => (
-          <div className="stat-card" key={label}>
-            <small>{label}</small>
-            <strong>{String(value)}</strong>
+    <Modal title={`Feedback for ${midwife.name}`} onClose={onClose}>
+      <div className="modal-feedback">
+        {feedbackQuery.loading ? (
+          <LoadingState label="Loading feedback..." />
+        ) : null}
+        {feedbackQuery.error ? (
+          <ErrorState message={feedbackQuery.error} />
+        ) : null}
+        {feedbackQuery.data ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Reviewer</th>
+                  <th>Rating</th>
+                  <th>Date</th>
+                  <th>Feedback</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleFeedback.map((review) => (
+                  <tr key={review.id}>
+                    <td>{review.reviewerName}</td>
+                    <td className="stars-cell">
+                      {"★".repeat(review.rating)}
+                      {"☆".repeat(5 - review.rating)}
+                    </td>
+                    <td>{new Date(review.createdAt).toLocaleDateString()}</td>
+                    <td>{review.comment || "No written feedback."}</td>
+                  </tr>
+                ))}
+                {!feedbackQuery.data.data.length ? (
+                  <tr>
+                    <td colSpan={4}>
+                      No feedback has been submitted for this midwife.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+            <div className="table-footer">
+              Showing {feedback.length ? (page - 1) * pageSize + 1 : 0} to{" "}
+              {Math.min(page * pageSize, feedback.length)} of {feedback.length}{" "}
+              entries
+              <div>
+                <button
+                  type="button"
+                  disabled={page === 1}
+                  onClick={() => setPage((current) => current - 1)}
+                >
+                  Previous
+                </button>
+                <span className="table-page-indicator">
+                  {page} / {pageCount}
+                </span>
+                <button
+                  type="button"
+                  disabled={page === pageCount}
+                  onClick={() => setPage((current) => current + 1)}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
-        ))}
-      </section>
-      <section className="analytics-grid">
-        <div className="panel">
-          <h3>Consultations Over Time</h3>
-          <div className="bar-chart">
-            {[35, 52, 40, 85, 68, 74].map((h, i) => (
-              <i key={i} style={{ height: `${h}%` }} />
-            ))}
-          </div>
-        </div>
-        <DataTable
-          title="Midwife Performance"
-          headers={[
-            "Midwife",
-            "People",
-            "Consult.",
-            "Completed",
-            "Rating",
-            "Status",
-          ]}
-          rows={performanceRows}
-          total={String(analytics.midwifePerformance.total)}
-        />
-      </section>
-    </>
+        ) : null}
+      </div>
+      <div className="modal-actions">
+        <button type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </Modal>
   );
 }
 
-/**
- * Admin-only review queue backed by the real midwife application endpoints.
- * Approval is immediate; rejecting and suspending prompt for the reason that
- * Django requires for those two review actions.
- */
 function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
   const applicationsQuery = useAsyncData(getMidwifeApplications, []);
+  const activeMidwivesQuery = useAsyncData(getMidwives, []);
   // The admin credentials form uses real hospital UUIDs, not free text.
   const hospitalsQuery = useAsyncData(getHospitals, []);
   const [applications, setApplications] = useState<MidwifeApplication[] | null>(
@@ -1440,11 +1672,37 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
     useState<MidwifeApplication | null>(null);
   const [rejectingApplication, setRejectingApplication] =
     useState<MidwifeApplication | null>(null);
+  const [suspendingApplication, setSuspendingApplication] =
+    useState<MidwifeApplication | null>(null);
+  const [selectedMidwife, setSelectedMidwife] =
+    useState<DirectoryRecord | null>(null);
 
   // Copy fetched items into local state only once so a completed review can
   // remove its application from the default pending/under-review queue.
   const displayedApplications =
     applications ?? applicationsQuery.data?.data ?? [];
+  const [pendingPage, setPendingPage] = useState(1);
+  const [activePage, setActivePage] = useState(1);
+  const pageSize = 10;
+  const activeMidwives = (activeMidwivesQuery.data?.data ?? []).filter(
+    (midwife) => midwife.status === "APPROVED" || midwife.status === "ACTIVE",
+  );
+  const pendingPageCount = Math.max(
+    1,
+    Math.ceil(displayedApplications.length / pageSize),
+  );
+  const activePageCount = Math.max(
+    1,
+    Math.ceil(activeMidwives.length / pageSize),
+  );
+  const visibleApplications = displayedApplications.slice(
+    (pendingPage - 1) * pageSize,
+    pendingPage * pageSize,
+  );
+  const visibleActiveMidwives = activeMidwives.slice(
+    (activePage - 1) * pageSize,
+    activePage * pageSize,
+  );
 
   function toPendingMidwife(application: MidwifeApplication): PendingMidwife {
     return {
@@ -1468,11 +1726,7 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
     action: MidwifeReviewAction,
     suppliedReason?: string,
   ) {
-    const reason =
-      suppliedReason ??
-      (action === "SUSPEND"
-        ? window.prompt("Reason for suspending this midwife:")?.trim()
-        : undefined);
+    const reason = suppliedReason;
     if (action !== "APPROVE" && !reason) return;
 
     setPendingId(application.id);
@@ -1491,6 +1745,7 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
       setReviewingApplication(null);
       setViewingCvApplication(null);
       setRejectingApplication(null);
+      setSuspendingApplication(null);
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -1531,14 +1786,23 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
     }
   }
 
-  if (applicationsQuery.loading || hospitalsQuery.loading)
+  if (
+    applicationsQuery.loading ||
+    hospitalsQuery.loading ||
+    activeMidwivesQuery.loading
+  )
     return <LoadingState label="Loading midwife applications..." />;
-  if (applicationsQuery.error || hospitalsQuery.error)
+  if (
+    applicationsQuery.error ||
+    hospitalsQuery.error ||
+    activeMidwivesQuery.error
+  )
     return (
       <ErrorState
         message={
           applicationsQuery.error ??
           hospitalsQuery.error ??
+          activeMidwivesQuery.error ??
           "Unable to load midwife applications."
         }
       />
@@ -1577,7 +1841,7 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {displayedApplications.map((application) => {
+              {visibleApplications.map((application) => {
                 const disabled = pendingId === application.id;
                 return (
                   <tr key={application.id}>
@@ -1608,7 +1872,8 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
                       </button>{" "}
                       <button
                         disabled={disabled}
-                        onClick={() => handleReview(application, "SUSPEND")}
+                        className="suspend-action"
+                        onClick={() => setSuspendingApplication(application)}
                       >
                         Suspend
                       </button>
@@ -1623,6 +1888,107 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
               ) : null}
             </tbody>
           </table>
+          <div className="table-footer">
+            Showing{" "}
+            {displayedApplications.length
+              ? (pendingPage - 1) * pageSize + 1
+              : 0}{" "}
+            to {Math.min(pendingPage * pageSize, displayedApplications.length)}{" "}
+            of {displayedApplications.length} entries
+            <div>
+              <button
+                type="button"
+                disabled={pendingPage === 1}
+                onClick={() => setPendingPage((current) => current - 1)}
+              >
+                Previous
+              </button>
+              <span className="table-page-indicator">
+                {pendingPage} / {pendingPageCount}
+              </span>
+              <button
+                type="button"
+                disabled={pendingPage === pendingPageCount}
+                onClick={() => setPendingPage((current) => current + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="panel data-panel">
+        <div className="panel-header">
+          <h2>Active Midwives</h2>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Midwife</th>
+                <th>Contact</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Feedback</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleActiveMidwives.map((midwife) => (
+                <tr key={midwife.id}>
+                  <td>
+                    <b>{midwife.name}</b>
+                  </td>
+                  <td>{midwife.contact}</td>
+                  <td>{midwife.location}</td>
+                  <td>
+                    <span className="status active">ACTIVE</span>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMidwife(midwife)}
+                      disabled={!midwife.midwifeProfileId}
+                    >
+                      View feedback
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!activeMidwivesQuery.data?.data.some(
+                (midwife) =>
+                  midwife.status === "APPROVED" || midwife.status === "ACTIVE",
+              ) ? (
+                <tr>
+                  <td colSpan={5}>No active midwives found.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+          <div className="table-footer">
+            Showing{" "}
+            {activeMidwives.length ? (activePage - 1) * pageSize + 1 : 0} to{" "}
+            {Math.min(activePage * pageSize, activeMidwives.length)} of{" "}
+            {activeMidwives.length} entries
+            <div>
+              <button
+                type="button"
+                disabled={activePage === 1}
+                onClick={() => setActivePage((current) => current - 1)}
+              >
+                Previous
+              </button>
+              <span className="table-page-indicator">
+                {activePage} / {activePageCount}
+              </span>
+              <button
+                type="button"
+                disabled={activePage === activePageCount}
+                onClick={() => setActivePage((current) => current + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       {reviewingApplication ? (
@@ -1652,6 +2018,15 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
             cvUrl: viewingCvApplication.cv_file_url,
           }}
           onClose={() => setViewingCvApplication(null)}
+          onSaveInformation={async (payload) => {
+            // Save verified profile details without changing the pending status.
+            await updateMidwifeApplication(viewingCvApplication.id, payload);
+            setApplications((current) => current?.map((application) =>
+              application.id === viewingCvApplication.id
+                ? { ...application, ...payload, hospital: hospitalsQuery.data?.data.find((hospital) => hospital.id === payload.hospital_id) ?? application.hospital }
+                : application,
+            ) ?? null);
+          }}
           onApprove={(payload) =>
             saveCredentialsAndApprove(viewingCvApplication, payload)
           }
@@ -1670,6 +2045,22 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
           onConfirm={(reason) =>
             handleReview(rejectingApplication, "REJECT", reason.trim())
           }
+        />
+      ) : null}
+      {suspendingApplication ? (
+        <SuspendMidwifeDialog
+          midwife={toPendingMidwife(suspendingApplication)}
+          onClose={() => setSuspendingApplication(null)}
+          submitting={pendingId === suspendingApplication.id}
+          onConfirm={(reason) =>
+            handleReview(suspendingApplication, "SUSPEND", reason)
+          }
+        />
+      ) : null}
+      {selectedMidwife?.midwifeProfileId ? (
+        <MidwifeFeedbackDialog
+          midwife={selectedMidwife}
+          onClose={() => setSelectedMidwife(null)}
         />
       ) : null}
     </>
@@ -1978,6 +2369,11 @@ function TableView({
     );
   }, [isHospitals, query, recordsQuery.data]);
 
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visibleRecords = filtered.slice((page - 1) * pageSize, page * pageSize);
+
   if (recordsQuery.loading) {
     return <LoadingState label={`Loading ${type.toLowerCase()}...`} />;
   }
@@ -2062,7 +2458,7 @@ function TableView({
           </thead>
           <tbody>
             {isHospitals
-              ? (filtered as HospitalRecord[]).map((record) => (
+              ? (visibleRecords as HospitalRecord[]).map((record) => (
                   <tr key={record.id}>
                     <td>
                       <div className="table-person">
@@ -2088,7 +2484,7 @@ function TableView({
                     </td>
                   </tr>
                 ))
-              : (filtered as DirectoryRecord[]).map((record) => (
+              : (visibleRecords as DirectoryRecord[]).map((record) => (
                   <tr
                     key={record.id}
                     onClick={() => isMidwives && onMidwife?.(record.status)}
@@ -2127,15 +2523,24 @@ function TableView({
           </tbody>
         </table>
         <div className="table-footer">
-          Showing 1 to {filtered.length} of {total} entries{" "}
+          Showing {filtered.length ? (page - 1) * pageSize + 1 : 0} to{" "}
+          {Math.min(page * pageSize, filtered.length)} of {total} entries{" "}
           <div>
-            <button>
+            <button
+              type="button"
+              disabled={page === 1}
+              onClick={() => setPage((current) => current - 1)}
+            >
               <ChevronLeft />
             </button>
-            <button className="current">1</button>
-            <button>2</button>
-            <button>3</button>
-            <button>
+            <span className="table-page-indicator">
+              {page} / {pageCount}
+            </span>
+            <button
+              type="button"
+              disabled={page === pageCount}
+              onClick={() => setPage((current) => current + 1)}
+            >
               <ChevronRight />
             </button>
           </div>
@@ -2162,9 +2567,19 @@ export default function AdminDashboard({
     null,
   );
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [contactsVersion, setContactsVersion] = useState(0);
   const [hospitalsVersion, setHospitalsVersion] = useState(0);
   const [midwivesVersion, setMidwivesVersion] = useState(0);
+
+  function navigateTo(nextActive: string) {
+    setActive(nextActive);
+    setAccountForm(null);
+    setShowAddAdminModal(false);
+    setModal(null);
+    setNotice(false);
+    setShowPasswordChange(false);
+  }
 
   async function submitAccountForm(
     variant: AccountFormVariant,
@@ -2213,8 +2628,8 @@ export default function AdminDashboard({
     <MidwivesView onAddMidwife={() => setAccountForm("midwife")} />
   ) : active === "Health" ? (
     <HealthView onAddContent={() => setModal("content")} />
-  ) : active === "Analytics" ? (
-    <AnalyticsView />
+  ) : active === "Learning" ? (
+    <LearningManagement />
   ) : active === "Feedback" ? (
     <FeedbackView />
   ) : active === "Consultations" ? (
@@ -2232,6 +2647,8 @@ export default function AdminDashboard({
     <SettingsView
       onAdministration={() => setActive("Administration")}
       onProfile={() => setActive("Profile")}
+      onPassword={() => setShowPasswordChange(true)}
+      onLogout={onLogout ?? (() => undefined)}
       user={user}
     />
   ) : active === "Profile" ? (
@@ -2269,7 +2686,7 @@ export default function AdminDashboard({
         sidebar={
           <Sidebar
             active={active}
-            setActive={setActive}
+            setActive={navigateTo}
             open={open}
             setOpen={setOpen}
             onLogout={onLogout}
@@ -2295,6 +2712,9 @@ export default function AdminDashboard({
           }}
         />
       )}
+      {showPasswordChange ? (
+        <PasswordChangeDialog onClose={() => setShowPasswordChange(false)} />
+      ) : null}
       {notice && (
         <Modal title="Create Notification" onClose={() => setNotice(false)}>
           <p>Notification Title</p>

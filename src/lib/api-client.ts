@@ -68,9 +68,25 @@ apiClient.interceptors.response.use(
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (axios.isAxiosError(error)) {
-    const message = (error.response?.data as { message?: string } | undefined)
-      ?.message;
-    return message ?? error.message ?? fallback;
+    const responseData = error.response?.data as
+      | { message?: string; detail?: string; [field: string]: unknown }
+      | undefined;
+    const message = responseData?.message ?? responseData?.detail;
+    if (typeof message === "string") return message;
+
+    if (responseData) {
+      const fieldErrors = Object.entries(responseData)
+        .filter(([field]) => field !== "message" && field !== "detail")
+        .flatMap(([field, value]) => {
+          const messages = Array.isArray(value) ? value : [value];
+          return messages
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => `${field}: ${item}`);
+        });
+      if (fieldErrors.length) return fieldErrors.join(" ");
+    }
+
+    return error.message ?? fallback;
   }
   return error instanceof Error ? error.message : fallback;
 }

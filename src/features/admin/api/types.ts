@@ -51,8 +51,59 @@ export type PaginatedResponse<T> = {
   total: number;
 };
 
+/** Learning Center records use UUIDs and the backend's editorial status values. */
+export type LearningCategory = {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string;
+  subtitle_summary: string;
+  description: string;
+  order: number;
+  topics_count?: number;
+  topics?: LearningTopic[];
+};
+
+export type LearningTopic = {
+  id: string;
+  category: string;
+  category_name?: string;
+  name: string;
+  slug: string;
+  icon: string;
+  description: string;
+  order: number;
+  articles_count?: number;
+};
+
+export type LearningArticleStatus = "PUBLISHED" | "DRAFT" | "REVIEW" | "ARCHIVED";
+export type LearningArticle = {
+  id: string;
+  topic: string;
+  topic_name?: string;
+  category_name?: string;
+  title: string;
+  summary: string;
+  content: string;
+  cover_image: string;
+  content_type: "TEXT" | "INFOGRAPHIC" | "VIDEO" | "INTERACTIVE";
+  sections: Array<{ title: string; detail: string }>;
+  key_takeaway_tip: string;
+  next_article: string | null;
+  author: string;
+  author_name?: string;
+  status: LearningArticleStatus;
+  reading_time_minutes: number;
+  views_count?: number;
+  created_at: string;
+  updated_at: string;
+  published_at?: string;
+};
+
 export type DirectoryRecord = {
   id: string;
+  /** MidwifeProfile UUID; present only in the midwife directory. */
+  midwifeProfileId?: string;
   name: string;
   email?: string;
   contact: string;
@@ -106,12 +157,30 @@ export type TableRecord = {
 export type FeedbackSummary = {
   averageRating: number;
   maxRating: number;
+  totalReviews: number;
   trend?: string;
   distribution: Array<{
     rating: number;
     count: number;
     percentage: string;
   }>;
+};
+
+export type FeedbackRecord = {
+  id: string;
+  midwifeId: string;
+  midwifeName: string;
+  reviewerName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+  isAnonymous: boolean;
+};
+
+export type PasswordChangePayload = {
+  oldPassword: string;
+  newPassword: string;
+  newPasswordConfirm: string;
 };
 
 export type ConsultationStats = {

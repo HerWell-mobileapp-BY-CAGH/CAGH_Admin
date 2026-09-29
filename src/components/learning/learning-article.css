@@ -1,0 +1,74 @@
+/* The article workspace follows the supplied editor, preview, and details layouts. */
+.learning-editor-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:4px 0 16px}
+.learning-editor-heading h1{margin:0;font-size:31px;line-height:1.15}
+.learning-editor-heading>div{display:flex;align-items:center;gap:10px}
+.learning-status-select{display:flex;align-items:center;gap:8px;color:#5e625e;font-size:12px}
+.learning-status-select select{min-height:38px;padding:0 10px;border:1px solid #dedfdd;border-radius:8px;background:#fff;color:#303330;font:inherit}
+.learning-editor-card{overflow:hidden;border:1px solid #e1e2df;border-radius:12px;background:#fff;box-shadow:0 5px 14px #0000000a}
+.learning-editor-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 24px;border-bottom:1px solid #e6e6e4}
+.learning-editor-section-head h2{display:flex;align-items:center;gap:9px;margin:0;color:#555955;font-size:12px;text-transform:uppercase;letter-spacing:.045em}
+.learning-editor-section-head h2>span{color:#285d25;font-size:17px}
+.learning-editor-section-head>small{color:#686c68;font-size:11px}
+.learning-editor-section-head>small>i{display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:#39813b}
+.learning-editor-field{display:flex;flex-direction:column;gap:8px;margin:18px 24px;color:#555955;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.learning-editor-field sup,.learning-editor-selects sup{color:#c43b3b}
+.learning-editor-field input,.learning-editor-field textarea,.learning-editor-selects select{width:100%;border:1px solid #e0dfdd;border-radius:8px;background:#faf9f8;padding:11px 14px;color:#292c29;font:inherit;font-size:14px;letter-spacing:0;text-transform:none;outline:none;resize:vertical}
+.learning-editor-field:first-of-type input{font-size:20px;font-weight:650}
+.learning-editor-field input:focus,.learning-editor-field textarea:focus,.learning-editor-selects select:focus{border-color:#54824f;box-shadow:0 0 0 3px #285d2515}
+.learning-editor-selects{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;padding:0 24px 20px}
+.learning-editor-selects label{display:flex;flex-direction:column;gap:8px;color:#555955;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.learning-editor-content{padding:0 24px 18px;border-top:1px solid #e6e6e4}
+.learning-editor-content>.learning-editor-section-head{margin:0 -24px 14px}
+.learning-markdown-toolbar{display:flex;align-items:center;gap:2px;min-height:48px;padding:5px 9px;border:1px solid #e1e2df;border-radius:9px 9px 0 0;background:#faf9f8}
+.learning-markdown-toolbar>button{min-width:32px;height:30px;border:0;border-right:1px solid #e4e4e2;background:transparent;color:#373a37;font:inherit;font-size:12px;cursor:pointer}
+.learning-markdown-toolbar>button:hover{background:#eef2ec;color:#285d25}
+.learning-editor-mode{display:flex;gap:3px;margin-left:auto;padding:3px;border:1px solid #e0e1df;border-radius:7px;background:#fff}
+.learning-editor-mode button{display:flex;align-items:center;gap:5px;padding:5px 9px;border:0;border-radius:5px;background:transparent;color:#5e625e;font:inherit;font-size:11px;cursor:pointer}
+.learning-editor-mode button.active{background:#285d25;color:#fff}
+.learning-editor-mode button svg{width:13px;height:13px}
+.learning-markdown-input,.learning-markdown-preview{display:block;width:100%;min-height:390px;padding:20px 22px;border:1px solid #e1e2df;border-top:0;border-radius:0 0 9px 9px;background:#fff;color:#292c29;font:inherit;font-size:15px;line-height:1.7;resize:vertical;outline:none;white-space:pre-wrap}
+.learning-markdown-input:focus{box-shadow:inset 0 0 0 1px #a6bba2}
+.learning-markdown-preview{overflow:auto;background:#fff;color:#353835}
+.learning-editor-metrics{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px 0;color:#666a66;font-size:11px}
+.learning-editor-metrics>span{display:flex;align-items:center;gap:6px}
+.learning-editor-metrics svg{width:14px;height:14px;color:#397337}
+.learning-editor-metrics b{color:#3c403c}
+.learning-editor-metrics i{font-style:normal;color:#b4b7b4;margin:0 3px}
+.learning-editor-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 24px;border-top:1px solid #e6e6e4;background:#faf9f8;color:#666a66;font-size:11px}
+.learning-editor-footer>div{display:flex;gap:9px}
+.learning-article-filters{display:flex;align-items:center;gap:10px;padding:15px 19px;border-bottom:1px solid #e6e6e4;background:#fff}
+.learning-article-filters>.learning-search{flex:1;width:auto}
+.learning-article-filters>label:not(.learning-search){display:flex;align-items:center;gap:7px;color:#5c605c;font-size:11px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+.learning-article-filters select{min-width:130px;height:38px;padding:0 10px;border:1px solid #dedfdd;border-radius:7px;background:#fbfaf9;color:#303330;font:inherit;font-size:12px;text-transform:none}
+.learning-article-filters>.learning-secondary{min-width:38px;padding:8px;font-size:18px}
+.learning-article-title{position:relative}
+.learning-article-title h1{max-width:calc(100% - 170px)}
+.learning-article-title>.learning-primary{position:absolute;right:26px;top:27px}
+.learning-article-identity{display:flex;gap:7px;margin-top:12px}
+.learning-article-identity span{padding:5px 9px;border-radius:6px;background:#efefed;color:#555955;font-size:11px;font-weight:650}
+@media(max-width:760px){
+  .learning-editor-heading{align-items:flex-start;flex-direction:column}
+  .learning-editor-heading>div{width:100%;flex-wrap:wrap}
+  .learning-editor-selects{grid-template-columns:1fr;gap:14px}
+  .learning-editor-footer{align-items:flex-start;flex-direction:column}
+  .learning-editor-footer>div{width:100%;flex-wrap:wrap}
+  .learning-article-filters{align-items:stretch;flex-direction:column}
+  .learning-article-filters>label:not(.learning-search){justify-content:space-between}
+  .learning-article-filters select{flex:1}
+  .learning-article-title h1{max-width:none}
+  .learning-article-title>.learning-primary{position:static;margin-top:12px}
+  .learning-editor-section-head{align-items:flex-start;flex-direction:column;padding:15px 18px}
+  .learning-editor-field{margin-left:18px;margin-right:18px}
+  .learning-editor-selects{padding-left:18px;padding-right:18px}
+  .learning-editor-content{padding-left:18px;padding-right:18px}
+  .learning-editor-content>.learning-editor-section-head{margin-left:-18px;margin-right:-18px}
+  .learning-editor-footer{padding:14px 18px}
+}
+@media(max-width:520px){
+  .learning-editor-heading h1{font-size:28px}
+  .learning-markdown-input,.learning-markdown-preview{min-height:300px;padding:15px;font-size:14px}
+  .learning-markdown-toolbar{flex-wrap:wrap}
+  .learning-editor-mode{margin-left:auto}
+  .learning-editor-metrics{align-items:flex-start;flex-direction:column}
+  .learning-editor-footer>div button{flex:1}
+}

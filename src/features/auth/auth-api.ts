@@ -1,4 +1,4 @@
-import { apiClient, getApiErrorMessage, storeTokens } from "../../lib/api-client";
+import { apiClient, storeTokens } from "../../lib/api-client";
 import type { SignInCredentials, SignInResponse } from "./types";
 
 const loginPath = "/auth/admin/login/";
@@ -18,6 +18,8 @@ export async function signIn(
     storeTokens(response.data.access, response.data.refresh);
     return response.data;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, "Unable to sign in. Please try again."));
+    throw new Error("wrong password or username please try again", {
+      cause: error,
+    });
   }
 }

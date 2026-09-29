@@ -1,7 +1,9 @@
 "use client";
 
 import { AlertTriangle, X } from "lucide-react";
+import { useState } from "react";
 import type { PendingMidwife } from "./midwife_review";
+import "./midwife_dialogues.css";
 
 interface RejectMidwifeRegistrationDialogProps {
   midwife: PendingMidwife;
@@ -18,6 +20,7 @@ export function RejectMidwifeRegistrationDialog({
   onClose,
   onConfirm,
 }: RejectMidwifeRegistrationDialogProps) {
+  const [reason, setReason] = useState("");
   return (
     <div className="modal-backdrop">
       {/* Reuse the dashboard dialog surface so destructive confirmations match the rest of the admin UI. */}
@@ -35,14 +38,16 @@ export function RejectMidwifeRegistrationDialog({
             <X />
           </button>
         </header>
-        <div className="reject-content">
+        <div className="reject-content reject-dialog-content">
           <p>
             Are you sure you want to reject this registration request?
             <br />
             This action will notify the applicant and cannot be easily undone.
           </p>
           <div className="reject-identity">
-            <div className="mini-avatar">SJ</div>
+            <div className="mini-avatar">
+              {midwife.name.slice(0, 2).toUpperCase()}
+            </div>
             <div>
               <b>{midwife.name}</b>
               <span>License: {midwife.license}</span>
@@ -53,28 +58,27 @@ export function RejectMidwifeRegistrationDialog({
             <b>
               REASON FOR REJECTION <sup>*</sup>
             </b>
-            <textarea
+              <textarea
               id="rejection-reason"
+              required
+              maxLength={500}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
               placeholder="Please provide a reason..."
             />
           </label>
           <small>
             This reason will be included in the email sent to the applicant.
           </small>
+          <span className="reject-char-count">{reason.length}/500</span>
         </div>
         <footer className="modal-actions">
-          <button onClick={onClose}>Cancel</button>
+          <button type="button" onClick={onClose}>Cancel</button>
           <button
+            type="button"
             className="danger"
-            onClick={() =>
-              onConfirm(
-                (
-                  document.getElementById(
-                    "rejection-reason",
-                  ) as HTMLTextAreaElement
-                )?.value ?? "",
-              )
-            }
+            disabled={!reason.trim()}
+            onClick={() => onConfirm(reason.trim())}
           >
             Reject
           </button>

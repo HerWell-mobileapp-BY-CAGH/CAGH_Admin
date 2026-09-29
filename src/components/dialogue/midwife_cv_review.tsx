@@ -1,10 +1,14 @@
 "use client";
 
-import { CheckCircle2, FileText, X } from "lucide-react";
+import { BadgeCheck, CheckCircle2, Clock3, FileText, IdCard, Save, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import type { PendingMidwife } from "./midwife_review";
-import type { HospitalRecord, UpdateMidwifeApplicationPayload } from "../../features/admin/api/types";
+import type {
+  HospitalRecord,
+  UpdateMidwifeApplicationPayload,
+} from "../../features/admin/api/types";
 import "./midwife_cv_review.css";
+import "./midwife_dialogues.css";
 
 interface MidwifeCvReviewDialogProps {
   midwife: PendingMidwife;
@@ -17,6 +21,7 @@ interface MidwifeCvReviewDialogProps {
     cvUrl: string | null;
   };
   onClose: () => void;
+  onSaveInformation: (payload: UpdateMidwifeApplicationPayload) => Promise<void>;
   onApprove: (payload: UpdateMidwifeApplicationPayload) => Promise<void>;
   onReject: () => void;
 }
@@ -26,17 +31,25 @@ export function MidwifeCvReviewDialog({
   hospitals,
   initialValues,
   onClose,
+  onSaveInformation,
   onApprove,
   onReject,
 }: MidwifeCvReviewDialogProps) {
   const [about, setAbout] = useState(initialValues.bio);
-  const [licenseNumber, setLicenseNumber] = useState(initialValues.licenseNumber);
-  const [experienceYears, setExperienceYears] = useState(String(initialValues.experienceYears));
+  const [licenseNumber, setLicenseNumber] = useState(
+    initialValues.licenseNumber,
+  );
+  const [experienceYears, setExperienceYears] = useState(
+    String(initialValues.experienceYears),
+  );
   const [hospitalId, setHospitalId] = useState(initialValues.hospitalId);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [reviewed, setReviewed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Display the actual uploaded document when available; never synthesize CV content.
+  const cvFileName = initialValues.cvUrl?.split("/").pop() || "Submitted CV";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,10 +65,32 @@ export function MidwifeCvReviewDialog({
         ...(cvFile ? { cv_file: cvFile } : {}),
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to save application details.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to save application details.",
+      );
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveInformation() {
+    setError(null);
+    if (!licenseNumber.trim() || !about.trim() || !hospitalId || !experienceYears) {
+      setError("Complete the required license, profile, experience, and workplace fields first.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSaveInformation({
+        license_number: licenseNumber.trim(), bio: about.trim(),
+        experience_years: Number(experienceYears), hospital_id: hospitalId,
+        ...(cvFile ? { cv_file: cvFile } : {}),
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to save application details.");
+    } finally { setSaving(false); }
   }
 
   return (
@@ -67,47 +102,37 @@ export function MidwifeCvReviewDialog({
         aria-labelledby="midwife-cv-title"
       >
         <header>
-          <h2 id="midwife-cv-title">Review Midwife Registration</h2>
+          <div className="cv-modal-title">
+            <h2 id="midwife-cv-title">Review Midwife Registration</h2>
+            <p>Review the submitted CV and complete the midwife's professional information.</p>
+          </div>
           <button type="button" onClick={onClose} aria-label="Close CV review">
             <X />
           </button>
         </header>
         <form onSubmit={submit}>
           <div className="cv-review-body">
-            <section className="cv-document" aria-label="Curriculum vitae">
-              <div className="cv-document-heading">
-                <FileText />
-                <div>
-                  <h3>{midwife.name}</h3>
-                  <p>Submitted curriculum vitae</p>
-                </div>
-              </div>
-              <div className="cv-document-copy">
-                <strong>Professional credentials</strong>
-                <p>{midwife.qualification}</p>
-                <p>{midwife.experience} of clinical experience</p>
-                <p>License number: {midwife.license}</p>
-                <p>Registered: {midwife.registered}</p>
-              </div>
+            <section className="cv-document-pane" aria-label="Curriculum vitae">
+              <div className="cv-pane-bar"><span><FileText /> Curriculum Vitae</span><span>Original submitted document</span></div>
               {initialValues.cvUrl ? (
-                <a href={initialValues.cvUrl} target="_blank" rel="noreferrer">
-                  Open submitted CV
-                </a>
-              ) : null}
+                <>
+                  <div className="cv-file-strip"><FileText /><div><b>{cvFileName}</b><small>Uploaded by applicant</small></div><a href={initialValues.cvUrl} target="_blank" rel="noreferrer">Open in new tab</a></div>
+                  <iframe className="cv-document-frame" src={initialValues.cvUrl} title={`Curriculum vitae for ${midwife.name}`} />
+                </>
+              ) : <div className="cv-empty"><FileText /><b>No CV was attached to this application.</b><span>Ask the applicant to provide a CV before approval.</span></div>}
             </section>
             <section
               className="cv-information-form"
               aria-label="Midwife information"
             >
-              <div className="cv-form-heading">
-                <div>
-                  <h3>Midwife Information</h3>
-                  <p>{midwife.name}</p>
-                </div>
-                <span className="status pending">Pending Verification</span>
+              <div className="cv-pane-bar"><span><IdCard /> Midwife Information</span><span className="cv-verified"><BadgeCheck /> ID Verified</span></div>
+              <div className="cv-applicant-card">
+                <div className="mini-avatar">{midwife.name.slice(0, 2).toUpperCase()}</div>
+                <div><h3>{midwife.name}</h3><p>{midwife.qualification}</p><small><Clock3 /> Registered {midwife.registered} · License {licenseNumber || "Not provided"}</small></div>
+                <span className="status pending">Pending verification</span>
               </div>
               <label>
-                <span>LICENSE NUMBER</span>
+                <span>LICENSE NUMBER <sup>*</sup></span>
                 <input
                   required
                   value={licenseNumber}
@@ -125,7 +150,7 @@ export function MidwifeCvReviewDialog({
                 />
               </label>
               <label>
-                <span>YEARS OF WORK EXPERIENCE</span>
+                <span>WORK EXPERIENCE · YEARS</span>
                 <input
                   required
                   type="number"
@@ -144,18 +169,15 @@ export function MidwifeCvReviewDialog({
                 >
                   <option value="">Select a hospital</option>
                   {hospitals.map((hospital) => (
-                    <option key={hospital.id} value={hospital.id}>{hospital.name}</option>
+                    <option key={hospital.id} value={hospital.id}>
+                      {hospital.name}
+                    </option>
                   ))}
                 </select>
+                <small>Choose the verified facility where this midwife works.</small>
               </label>
-              <label>
-                <span>CV FILE</span>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={(event) => setCvFile(event.target.files?.[0] ?? null)}
-                />
-              </label>
+              <label className="cv-replacement-label"><span>REPLACE CV (OPTIONAL)</span><input type="file" accept=".pdf,.doc,.docx" onChange={(event) => setCvFile(event.target.files?.[0] ?? null)} /></label>
+              <button className="cv-save-info" type="button" onClick={saveInformation} disabled={saving}><Save /> {saving ? "Saving information…" : "Save Information"}</button>
             </section>
           </div>
           {error ? <p role="alert">{error}</p> : null}
@@ -178,7 +200,11 @@ export function MidwifeCvReviewDialog({
               >
                 Reject
               </button>
-              <button type="submit" className="primary" disabled={!reviewed || saving}>
+              <button
+                type="submit"
+                className="primary"
+                disabled={!reviewed || saving}
+              >
                 <CheckCircle2 /> {saving ? "Saving..." : "Approve Midwife"}
               </button>
             </div>

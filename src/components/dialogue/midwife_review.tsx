@@ -9,6 +9,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import "./midwife_dialogues.css";
 
 /**
  * Minimal profile data passed into the review dialog. Keeping this contract
@@ -63,7 +64,9 @@ export function ReviewMidwifeRegistrationDialog({
         </header>
         <div className="review-content">
           <div className="review-identity">
-            <div className="mini-avatar">HT</div>
+            <div className="mini-avatar">
+              {midwife.name.slice(0, 2).toUpperCase()}
+            </div>
             <div>
               <h3>{midwife.name}</h3>
               <p>Professional Midwife</p>
@@ -128,7 +131,9 @@ export function ReviewMidwifeRegistrationDialog({
           </div>
         </div>
         <footer className="modal-actions">
-          <button type="button" onClick={onReject}>Reject</button>
+          <button type="button" onClick={onReject}>
+            Reject
+          </button>
           <button type="button" className="primary" onClick={onApprove}>
             Review CV &amp; Approve
           </button>

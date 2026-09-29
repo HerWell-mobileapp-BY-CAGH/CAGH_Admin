@@ -24,14 +24,25 @@ export const adminEndpoints = {
   users: "/admin/users/",
   hospitals: "/admin/hospitals/",
   profile: "/admin/profile/",
+  passwordChange: "/auth/admin/password/change/",
   // The signed-in administrator's persisted dashboard language preference.
   languagePreference: "/admin/language/",
   consultations: "/admin/consultations/",
   consultationStats: "/consultations/stats",
   appointments: "/admin/appointments/",
-  feedback: "/feedback",
-  feedbackSummary: "/feedback/summary",
+  feedback: "/reviews/admin/public/",
+  feedbackForMidwife: (midwifeId: string) =>
+    `/reviews/admin/midwives/${midwifeId}/`,
+  feedbackSummary: "/reviews/admin/summary/",
   healthContent: "/health-content",
+  // Learning Center taxonomy and article endpoints exposed by the Django
+  // learning app. Writes are restricted to administrator accounts server-side.
+  learningCategories: "/learning/categories/",
+  learningCategory: (id: string) => `/learning/categories/${id}/`,
+  learningTopics: "/learning/topics/",
+  learningTopic: (id: string) => `/learning/topics/${id}/`,
+  learningArticles: "/learning/articles/",
+  learningArticle: (id: string) => `/learning/articles/${id}/`,
   services: "/services",
   emergencyContacts: "/admin/emergency-contacts/",
   analytics: "/analytics",
