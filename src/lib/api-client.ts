@@ -1,6 +1,7 @@
 import axios, { type InternalAxiosRequestConfig } from "axios";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+// Use the deployed API by default while still allowing environment overrides.
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "https://cagh-backend-api.onrender.com/api/v1";
 
 export const accessTokenKey = "access_token";
 export const refreshTokenKey = "refresh_token";
