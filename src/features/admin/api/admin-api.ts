@@ -275,7 +275,7 @@ export function getConsultations() {
       total: response.data.count,
       data: response.data.results.map((item) => ({
         id: item.id,
-        cells: [item.id, item.consultation_type, displayUser(item.midwife_detail?.user), item.created_at, item.status, item.appointment],
+        cells: [item.consultation_type, displayUser(item.midwife_detail?.user), item.created_at, item.status, item.appointment],
       })),
     }) satisfies PaginatedResponse<TableRecord>)
     .catch((error: unknown) => { throw new Error(getApiErrorMessage(error, "Unable to load consultations.")); });

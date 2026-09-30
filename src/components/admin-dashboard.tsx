@@ -283,7 +283,9 @@ function PageHeader({
 
 function StatsGrid({
   stats,
+  navigateTo,
 }: {
+  navigateTo?: (page: string) => void;
   stats: {
     totalUsers: number | string;
     totalUsersChange?: number | string;
@@ -300,6 +302,7 @@ function StatsGrid({
         title="Total Users"
         value={String(stats.totalUsers)}
         featured
+        onNavigate={navigateTo ? () => navigateTo("Users") : undefined}
         note={
           stats.totalUsersChange ? (
             <>
@@ -311,6 +314,7 @@ function StatsGrid({
       <StatCard
         title="Total Midwives"
         value={String(stats.totalMidwives)}
+        onNavigate={navigateTo ? () => navigateTo("Midwives") : undefined}
         note={
           stats.midwivesPending ? (
             <em>{stats.midwivesPending} pending approval</em>
@@ -368,6 +372,7 @@ function GrowthChartPanel() {
 
 function AppointmentsSummaryPanel({
   appointments,
+  onNavigate,
 }: {
   appointments: Array<{
     label: string;
@@ -375,6 +380,7 @@ function AppointmentsSummaryPanel({
     count: number | string;
     kind: "complete" | "booked" | "cancelled";
   }>;
+  onNavigate: () => void;
 }) {
   const appointmentIcons = {
     complete: Check,
@@ -386,7 +392,7 @@ function AppointmentsSummaryPanel({
     <div className="panel appointments">
       <div className="panel-header">
         <h2>Appointments Summary</h2>
-        <a>View All ›</a>
+        <button type="button" className="summary-link" onClick={onNavigate}>View All ›</button>
       </div>
       {appointments.map((item) => {
         const Icon = appointmentIcons[item.kind];
@@ -407,7 +413,7 @@ function AppointmentsSummaryPanel({
   );
 }
 
-function Dashboard() {
+function Dashboard({ navigateTo }: { navigateTo: (page: string) => void }) {
   // One authoritative request supplies the live dashboard totals, statuses,
   // and audited activity feed from GET /api/v1/admin/dashboard/.
   const dashboardQuery = useAsyncData(getAdminDashboard, []);
@@ -506,10 +512,10 @@ function Dashboard() {
           </button>
         }
       />
-      <StatsGrid stats={stats} />
+      <StatsGrid stats={stats} navigateTo={navigateTo} />
       <section className="dashboard-grid">
         <GrowthChartPanel />
-        <AppointmentsSummaryPanel appointments={appointments} />
+        <AppointmentsSummaryPanel appointments={appointments} onNavigate={() => navigateTo("Appointments")} />
       </section>
     </>
   );
@@ -707,7 +713,7 @@ function ConsultationsView() {
       </section>
       <DataTable
         title="Recent Activity"
-        headers={["ID", "Type", "Midwife", "Date", "Status", "Actions"]}
+        headers={["Type", "Midwife", "Date", "Status", "Actions"]}
         rows={consultationRows}
         showToolbar={false}
         total={String(
@@ -847,15 +853,21 @@ function DataTable({
   total: string;
   showToolbar?: boolean;
 }) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+  const filteredRows = useMemo(() => normalizedQuery
+    ? rows.filter((row) => row.some((cell) => cell.toLocaleLowerCase().includes(normalizedQuery)))
+    : rows, [normalizedQuery, rows]);
   const [page, setPage] = useState(1);
   const pageSize = 10;
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
-  const visibleRows = rows.slice((page - 1) * pageSize, page * pageSize);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const visibleRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="panel data-panel generic-table">
       <div className="panel-header">
         <h2>{title}</h2>
+        <label className="table-search"><Search /><input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={`Search ${title.toLowerCase()}...`} aria-label={`Search ${title.toLowerCase()}`} /></label>
         {showToolbar ? (
           <div className="table-filters">
             <button>All</button>
@@ -892,8 +904,8 @@ function DataTable({
           </tbody>
         </table>
         <div className="table-footer">
-          Showing {rows.length ? (page - 1) * pageSize + 1 : 0} to{" "}
-          {Math.min(page * pageSize, rows.length)} of {total} entries{" "}
+          Showing {filteredRows.length ? (page - 1) * pageSize + 1 : 0} to{" "}
+          {Math.min(page * pageSize, filteredRows.length)} of {filteredRows.length === rows.length ? total : filteredRows.length} entries{" "}
           <div>
             <button
               type="button"
@@ -2351,21 +2363,23 @@ function TableView({
 
   const filtered = useMemo(() => {
     if (!recordsQuery.data) return [];
+    const term = query.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+    if (!term) return recordsQuery.data.data;
 
     if (isHospitals) {
       return (recordsQuery.data.data as HospitalRecord[]).filter((record) =>
-        [record.name, record.id, record.location, record.status]
+        [record.name, record.location, record.status]
           .join(" ")
-          .toLowerCase()
-          .includes(query.toLowerCase()),
+          .toLocaleLowerCase()
+          .replace(/\s+/g, " ").includes(term),
       );
     }
 
     return (recordsQuery.data.data as DirectoryRecord[]).filter((record) =>
-      [record.name, record.id, record.contact, record.location, record.status]
+      [record.name, record.email, record.contact, record.location, record.status]
         .join(" ")
-        .toLowerCase()
-        .includes(query.toLowerCase()),
+        .toLocaleLowerCase()
+        .replace(/\s+/g, " ").includes(term),
     );
   }, [isHospitals, query, recordsQuery.data]);
 
@@ -2411,7 +2425,9 @@ function TableView({
           Search
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+            type="search"
+            aria-label={`Search ${type.toLowerCase()}`}
             placeholder={
               isHospitals ? "Hospital name..." : "Name, ID, or Phone"
             }
@@ -2450,7 +2466,7 @@ function TableView({
                 ? ["Hospital", "Location", "Midwives", "Status", "Actions"]
                 : isMidwives
                   ? ["Email", "Location", "Status", "Action"]
-                  : ["User", "Contact", "Location", "Status", "Action"]
+                  : ["User", "Contact", "Location", "Status"]
               ).map((h) => (
                 <th key={h}>{h}</th>
               ))}
@@ -2501,7 +2517,6 @@ function TableView({
                           </div>
                           <div>
                             <b>{record.name}</b>
-                            <small>ID: {record.id}</small>
                           </div>
                         </div>
                       )}
@@ -2623,7 +2638,7 @@ export default function AdminDashboard({
       onSubmit={(values) => submitAccountForm(accountForm, values)}
     />
   ) : active === "Dashboard" ? (
-    <Dashboard />
+    <Dashboard navigateTo={navigateTo} />
   ) : active === "Midwives" ? (
     <MidwivesView onAddMidwife={() => setAccountForm("midwife")} />
   ) : active === "Health" ? (
