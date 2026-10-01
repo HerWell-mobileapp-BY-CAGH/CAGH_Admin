@@ -9,6 +9,7 @@ import type {
   ConsultationStats,
   CreateAccountPayload,
   CreateAccountResponse,
+  CreateMidwifeAccountPayload,
   CreateEmergencyContactPayload,
   CreateHospitalPayload,
   DirectoryRecord,
@@ -275,7 +276,7 @@ export function getConsultations() {
       total: response.data.count,
       data: response.data.results.map((item) => ({
         id: item.id,
-        cells: [item.id, item.consultation_type, displayUser(item.midwife_detail?.user), item.created_at, item.status, item.appointment],
+        cells: [item.consultation_type, displayUser(item.midwife_detail?.user), item.created_at, item.status],
       })),
     }) satisfies PaginatedResponse<TableRecord>)
     .catch((error: unknown) => { throw new Error(getApiErrorMessage(error, "Unable to load consultations.")); });
@@ -302,7 +303,7 @@ export function getAppointments() {
       total: response.data.count,
       data: response.data.results.map((item) => ({
         id: item.id,
-        cells: [item.scheduled_date, displayUser(item.user_detail), displayUser(item.midwife_detail?.user), item.appointment_type, item.status, item.appointment_number],
+        cells: [item.scheduled_date, displayUser(item.user_detail), displayUser(item.midwife_detail?.user), item.appointment_type, item.status],
       })),
     }) satisfies PaginatedResponse<TableRecord>)
     .catch((error: unknown) => { throw new Error(getApiErrorMessage(error, "Unable to load appointments.")); });
@@ -311,6 +312,10 @@ export function getAppointments() {
 type BackendReview = {
   id: string;
   midwife: string;
+  consultation?: string | null;
+  consultation_id?: string | null;
+  appointment?: string | null;
+  appointment_id?: string | null;
   midwife_name: string;
   reviewer_name: string;
   rating: number;
@@ -325,6 +330,7 @@ function toFeedbackRecord(review: BackendReview): FeedbackRecord {
   return {
     id: review.id,
     midwifeId: review.midwife,
+    sessionId: review.consultation_id ?? review.consultation ?? review.appointment_id ?? review.appointment ?? undefined,
     midwifeName: review.midwife_name,
     reviewerName: review.reviewer_name,
     rating: review.rating,
@@ -592,10 +598,26 @@ export function createUserAccount(payload: CreateAccountPayload) {
   );
 }
 
-export function createMidwifeAccount(payload: CreateAccountPayload) {
+export function createMidwifeAccount(payload: CreateMidwifeAccountPayload | CreateAccountPayload) {
+  const details = "fullName" in payload ? payload : null;
+  const nameParts = details?.fullName.trim().split(/\s+/) ?? [];
+  const firstName = nameParts.shift() ?? "";
+  const lastName = nameParts.join(" ");
   return post<CreateAccountResponse>(
     adminEndpoints.users,
-    toAccountPayload(payload, "MIDWIFE"),
+    {
+      ...toAccountPayload(payload, "MIDWIFE"),
+      ...(details ? {
+        first_name: firstName,
+        last_name: lastName,
+        phone_number: details.phoneNumber,
+        ...(details.licenseNumber ? { license_number: details.licenseNumber } : {}),
+        ...(details.specialty ? { specialty: details.specialty } : {}),
+        experience_years: details.experienceYears,
+        ...(details.hospitalId ? { hospital_id: details.hospitalId } : {}),
+        ...(details.bio ? { bio: details.bio } : {}),
+      } : {}),
+    },
     "Unable to create midwife account.",
   );
 }

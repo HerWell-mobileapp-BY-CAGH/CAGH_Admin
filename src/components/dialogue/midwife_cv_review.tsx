@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeCheck, CheckCircle2, Clock3, FileText, IdCard, Save, X } from "lucide-react";
+import { ArrowLeft, BadgeCheck, CheckCircle2, Clock3, FileText, IdCard, Save, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import type { PendingMidwife } from "./midwife_review";
 import type {
@@ -19,7 +19,10 @@ interface MidwifeCvReviewDialogProps {
     experienceYears: number;
     hospitalId: string;
     cvUrl: string | null;
+    specialty: string;
+    languages: string;
   };
+  onBack: () => void;
   onClose: () => void;
   onSaveInformation: (payload: UpdateMidwifeApplicationPayload) => Promise<void>;
   onApprove: (payload: UpdateMidwifeApplicationPayload) => Promise<void>;
@@ -31,6 +34,7 @@ export function MidwifeCvReviewDialog({
   hospitals,
   initialValues,
   onClose,
+  onBack,
   onSaveInformation,
   onApprove,
   onReject,
@@ -43,6 +47,8 @@ export function MidwifeCvReviewDialog({
     String(initialValues.experienceYears),
   );
   const [hospitalId, setHospitalId] = useState(initialValues.hospitalId);
+  const [specialty, setSpecialty] = useState(initialValues.specialty);
+  const [languages, setLanguages] = useState(initialValues.languages);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [reviewed, setReviewed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -62,6 +68,8 @@ export function MidwifeCvReviewDialog({
         bio: about.trim(),
         experience_years: Number(experienceYears),
         hospital_id: hospitalId,
+        specialty: specialty.trim(),
+        languages: languages.trim(),
         ...(cvFile ? { cv_file: cvFile } : {}),
       });
     } catch (cause) {
@@ -86,6 +94,7 @@ export function MidwifeCvReviewDialog({
       await onSaveInformation({
         license_number: licenseNumber.trim(), bio: about.trim(),
         experience_years: Number(experienceYears), hospital_id: hospitalId,
+        specialty: specialty.trim(), languages: languages.trim(),
         ...(cvFile ? { cv_file: cvFile } : {}),
       });
     } catch (cause) {
@@ -102,6 +111,9 @@ export function MidwifeCvReviewDialog({
         aria-labelledby="midwife-cv-title"
       >
         <header>
+          <button type="button" className="cv-back-button" onClick={onBack} aria-label="Back to midwife review">
+            <ArrowLeft /><span>Back to review</span>
+          </button>
           <div className="cv-modal-title">
             <h2 id="midwife-cv-title">Review Midwife Registration</h2>
             <p>Review the submitted CV and complete the midwife's professional information.</p>
@@ -159,6 +171,14 @@ export function MidwifeCvReviewDialog({
                   onChange={(event) => setExperienceYears(event.target.value)}
                   placeholder="e.g. 5"
                 />
+              </label>
+              <label>
+                <span>SPECIALTY</span>
+                <input value={specialty} onChange={(event) => setSpecialty(event.target.value)} placeholder="e.g. Maternal health" />
+              </label>
+              <label>
+                <span>LANGUAGES</span>
+                <input value={languages} onChange={(event) => setLanguages(event.target.value)} placeholder="e.g. Amharic, Afaan Oromo" />
               </label>
               <label>
                 <span>HOSPITAL / WORKPLACE</span>

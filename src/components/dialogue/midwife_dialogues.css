@@ -41,8 +41,18 @@
 
 .review-content,
 .reject-content {
-  padding: 24px;
+  padding: 28px;
   background: #fbfcfa;
+}
+
+.review-modal.dashboard-dialog {
+  width: min(720px, calc(100vw - 32px));
+  background: #fbfcfa;
+}
+
+.review-modal .review-identity {
+  padding: 18px 20px;
+  box-shadow: 0 3px 12px #192d1608;
 }
 
 .review-identity,
@@ -79,9 +89,21 @@
 }
 
 .review-section {
-  margin-top: 18px;
-  padding-top: 18px;
+  margin-top: 24px;
+  padding-top: 22px;
   border-top: 1px solid #e5e9e3;
+}
+
+.review-bio {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #e3e9e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #515851;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .review-section h4,
@@ -177,7 +199,7 @@
 
   .review-content,
   .reject-content {
-    padding: 18px;
+    padding: 20px 18px;
   }
 
   .review-info-grid {

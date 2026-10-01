@@ -3,6 +3,10 @@
 /* The CV-review layout keeps the document and editable profile side by side on desktop. */
 .midwife-cv-modal.dashboard-dialog{display:flex;flex-direction:column;width:min(1180px,calc(100vw - 40px));max-height:min(900px,calc(100vh - 32px));overflow:hidden;background:#fff;border-radius:12px}
 .midwife-cv-modal>header{min-height:88px;flex:none;padding:16px 30px;align-items:flex-start}
+.midwife-cv-modal>header .cv-back-button{display:inline-flex;align-items:center;gap:7px;min-height:38px;margin-top:7px;padding:7px 10px;border:1px solid #dfe4dd;border-radius:7px;background:#fff;color:#355a35;font-size:12px;font-weight:650;white-space:nowrap;cursor:pointer}
+.midwife-cv-modal>header .cv-back-button svg{width:16px;height:16px}
+.midwife-cv-modal>header .cv-modal-title{flex:1;padding:0 12px}
+.midwife-cv-modal>header>button:last-child{flex:none}
 .midwife-cv-modal .cv-modal-title h2{margin:0;color:#252925;font-size:25px}
 .midwife-cv-modal .cv-modal-title p{margin:5px 0 0;color:#687068;font-size:13px}
 .midwife-cv-modal form{overflow:hidden}
@@ -20,7 +24,7 @@
 .cv-verified{color:#25823a!important;font-weight:700!important}
 .cv-applicant-card{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--border);border-radius:9px;background:#f7f6f5}
 .cv-applicant-card .mini-avatar{width:48px;height:48px;flex:none}.cv-applicant-card>div:nth-child(2){flex:1;min-width:0}.cv-applicant-card h3{margin:0!important;font-size:17px!important}.cv-applicant-card p{margin:3px 0!important;color:#606760}.cv-applicant-card small{display:flex;align-items:center;gap:4px;color:#737973;font-size:10px}.cv-applicant-card small svg{width:12px;height:12px}
-.cv-information-form label{margin-top:14px}.cv-information-form label>span{font-size:10px}.cv-information-form label>small{display:block;margin-top:5px;color:#747a74;font-size:10px}.cv-information-form label sup{color:#cf3232}
+.cv-information-form label{margin-top:19px}.cv-information-form label>span{font-size:10px}.cv-information-form label>small{display:block;margin-top:5px;color:#747a74;font-size:10px}.cv-information-form label sup{color:#cf3232}
 .cv-information-form select{width:100%;height:40px;padding:0 11px;border:1px solid #d6d9d5;border-radius:7px;background:#fff;color:var(--foreground);font:inherit;font-size:12px}
 .cv-replacement-label input{font-size:11px!important;padding:8px!important}
 .cv-save-info{display:flex;align-items:center;gap:7px;margin:16px 0 0 auto;padding:8px 12px;border:1px solid #397448;border-radius:7px;background:#fff;color:#397448;font-size:12px;font-weight:600;cursor:pointer}.cv-save-info svg{width:14px;height:14px}.cv-save-info:disabled{opacity:.55;cursor:wait}
