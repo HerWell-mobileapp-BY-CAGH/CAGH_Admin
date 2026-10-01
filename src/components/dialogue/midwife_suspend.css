@@ -82,25 +82,31 @@
 
 .suspend-modal .danger,
 .suspend-action {
-  border-color: #0d98ba;
-  color: #0d98ba;
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .suspend-modal .danger {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: #0d98ba;
+  background: var(--primary);
   color: #fff;
 }
 
 .suspend-modal .danger:hover,
 .suspend-action:hover {
-  border-color: #0b7894;
-  background: #0b7894;
+  border-color: var(--primary);
+  background: var(--primary);
   color: #fff;
 }
 
 .suspend-action {
-  background: transparent;
+  background: #fff;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
 }

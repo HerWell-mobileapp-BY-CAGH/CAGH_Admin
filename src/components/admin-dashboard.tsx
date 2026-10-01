@@ -70,6 +70,7 @@ import { MidwifeCvReviewDialog } from "./dialogue/midwife_cv_review";
 import type { AccountFormVariant } from "./forms/account-form-config";
 import type { AccountFormValues } from "./forms/account-form-config";
 import { StatCard } from "./ui/stat-card";
+import "./midwife-analytics.css";
 import { LearningManagement } from "./learning/LearningManagement";
 import {
   AlertTriangle,
@@ -95,6 +96,7 @@ import {
   XCircle,
   CirclePlus,
   Crosshair,
+  Download,
   MapPin,
   Phone,
 } from "lucide-react";
@@ -685,6 +687,7 @@ function ConsultationsView() {
         <StatCard
           title="Anonymous"
           value={String(stats.anonymous)}
+          showArrow={false}
           note={
             stats.anonymousChange ? (
               <b className="green-text">↗ {stats.anonymousChange}</b>
@@ -695,15 +698,18 @@ function ConsultationsView() {
           title="Messages"
           value={String(stats.messages)}
           note={<>Consultation messages</>}
+          showArrow={false}
         />
         <StatCard
           title="Voice"
           value={String(stats.voice)}
           note={<>Voice sessions</>}
+          showArrow={false}
         />
         <StatCard
           title="Completed"
           value={String(stats.completed)}
+          showArrow={false}
           note={
             stats.completedChange ? (
               <b className="green-text">↗ {stats.completedChange}</b>
@@ -713,7 +719,7 @@ function ConsultationsView() {
       </section>
       <DataTable
         title="Recent Activity"
-        headers={["Type", "Midwife", "Date", "Status", "Actions"]}
+        headers={["Type", "Midwife", "Date", "Status"]}
         rows={consultationRows}
         showToolbar={false}
         total={String(
@@ -746,7 +752,7 @@ function AppointmentsView() {
       </div>
       <DataTable
         title="Appointments"
-        headers={["Date", "User", "Midwife", "Type", "Status", "Actions"]}
+        headers={["Date", "User", "Midwife", "Type", "Status"]}
         rows={appointmentRows}
         showToolbar={false}
         total={`${appointmentsQuery.data?.total ?? appointmentRows.length} appointments`}
@@ -1426,10 +1432,8 @@ function AdminProfileView({ onBack }: { onBack: () => void }) {
   );
 }
 function AdministrationView({
-  onAddAdmin,
   onOpenAdministrators,
 }: {
-  onAddAdmin: () => void;
   onOpenAdministrators: () => void;
 }) {
   return (
@@ -1437,11 +1441,6 @@ function AdministrationView({
       <PageHeader
         title="Administration"
         subtitle="Manage administrators, roles and platform permissions."
-        actions={
-          <button type="button" className="primary" onClick={onAddAdmin}>
-            + Add Administrator
-          </button>
-        }
       />
       <div className="admin-tiles">
         <button
@@ -1567,107 +1566,107 @@ function ConsultationReportView({ midwifeId }: { midwifeId?: string }) {
     </>
   );
 }
-/**
- * Admin-only review queue backed by the real midwife application endpoints.
- * Approval is immediate; rejecting and suspending require a reason.
- */
-function MidwifeFeedbackDialog({
+
+function MidwifeAnalyticsView({
   midwife,
-  onClose,
+  onBack,
 }: {
   midwife: DirectoryRecord;
-  onClose: () => void;
+  onBack: () => void;
 }) {
+  const reportQuery = useAsyncData(
+    () => getConsultationReport(midwife.midwifeProfileId),
+    [midwife.midwifeProfileId],
+  );
   const feedbackQuery = useAsyncData(
     () => getFeedbackForMidwife(midwife.midwifeProfileId!),
     [midwife.midwifeProfileId],
   );
-  const [page, setPage] = useState(1);
-  const feedback = feedbackQuery.data?.data ?? [];
-  const pageSize = 10;
-  const pageCount = Math.max(1, Math.ceil(feedback.length / pageSize));
-  const visibleFeedback = feedback.slice(
-    (page - 1) * pageSize,
-    page * pageSize,
-  );
+  const [feedbackSession, setFeedbackSession] = useState<string | null>(null);
+
+  if (reportQuery.loading || feedbackQuery.loading) {
+    return <LoadingState label="Loading midwife analytics..." />;
+  }
+  if (reportQuery.error || !reportQuery.data) {
+    return <ErrorState message={reportQuery.error ?? "Unable to load this midwife's analytics."} />;
+  }
+
+  const report = reportQuery.data;
+  const reviews = feedbackQuery.data?.data ?? [];
+  const selectedReviews = feedbackSession
+    ? reviews.filter((review) => review.sessionId === feedbackSession)
+    : [];
+  const history = report.history.data;
+  const exportReport = () => {
+    const lines = [
+      ["Date", "Type", "Users", "Status"],
+      ...history.map((item) => item.cells),
+    ].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","));
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }));
+    link.download = `${report.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-consultation-report.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
 
   return (
-    <Modal title={`Feedback for ${midwife.name}`} onClose={onClose}>
-      <div className="modal-feedback">
-        {feedbackQuery.loading ? (
-          <LoadingState label="Loading feedback..." />
-        ) : null}
-        {feedbackQuery.error ? (
-          <ErrorState message={feedbackQuery.error} />
-        ) : null}
-        {feedbackQuery.data ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Reviewer</th>
-                  <th>Rating</th>
-                  <th>Date</th>
-                  <th>Feedback</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleFeedback.map((review) => (
-                  <tr key={review.id}>
-                    <td>{review.reviewerName}</td>
-                    <td className="stars-cell">
-                      {"★".repeat(review.rating)}
-                      {"☆".repeat(5 - review.rating)}
-                    </td>
-                    <td>{new Date(review.createdAt).toLocaleDateString()}</td>
-                    <td>{review.comment || "No written feedback."}</td>
-                  </tr>
-                ))}
-                {!feedbackQuery.data.data.length ? (
-                  <tr>
-                    <td colSpan={4}>
-                      No feedback has been submitted for this midwife.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-            <div className="table-footer">
-              Showing {feedback.length ? (page - 1) * pageSize + 1 : 0} to{" "}
-              {Math.min(page * pageSize, feedback.length)} of {feedback.length}{" "}
-              entries
-              <div>
-                <button
-                  type="button"
-                  disabled={page === 1}
-                  onClick={() => setPage((current) => current - 1)}
-                >
-                  Previous
-                </button>
-                <span className="table-page-indicator">
-                  {page} / {pageCount}
-                </span>
-                <button
-                  type="button"
-                  disabled={page === pageCount}
-                  onClick={() => setPage((current) => current + 1)}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+    <>
+      <button type="button" className="back-link midwife-analytics-back" onClick={onBack}>← Midwives</button>
+      <section className="report-profile midwife-analytics-profile">
+        <div className="profile-avatar">{getInitials(report.name || midwife.name)}</div>
+        <div>
+          <h1>{report.name || midwife.name}</h1>
+          <p>{report.subtitle || midwife.location}</p>
+        </div>
+        <div className="midwife-report-meta">
+          <span className={`status ${report.status.toLowerCase()}`}>{report.status}</span>
+          <small>Reporting period: {report.reportingPeriod ?? "All available dates"}</small>
+        </div>
+      </section>
+      <section className="stats report-stats midwife-analytics-stats">
+        {report.stats.slice(0, 5).map(({ label, value }) => (
+          <div className="stat-card" key={label}><small>{label}</small><strong>{String(value)}</strong></div>
+        ))}
+      </section>
+      <section className="panel midwife-breakdown-panel">
+        <h2>Consultation Breakdown</h2>
+        {report.breakdown.map(({ label, count, width }, index) => (
+          <div className={`breakdown midwife-breakdown tone-${index % 4}`} key={label}>
+            <b>{label}<span>{String(count)}</span></b><i><em style={{ width }} /></i>
           </div>
-        ) : null}
-      </div>
-      <div className="modal-actions">
-        <button type="button" onClick={onClose}>
-          Close
-        </button>
-      </div>
-    </Modal>
+        ))}
+      </section>
+      <section className="panel data-panel midwife-history-panel">
+        <div className="panel-header"><h2>Consultation History</h2></div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr>{["Date", "Type", "Users", "Status", "Feedback"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
+            <tbody>
+              {history.map((item) => (
+                <tr key={item.id}>
+                  {item.cells.slice(0, 4).map((cell, index) => <td key={index}>{index === 3 ? <span className={`status ${cell.toLowerCase()}`}>{cell}</span> : cell}</td>)}
+                  <td><button className="feedback-session-button" type="button" onClick={() => setFeedbackSession(item.id)}>View feedback</button></td>
+                </tr>
+              ))}
+              {!history.length ? <tr><td colSpan={5}>No consultation history is available.</td></tr> : null}
+            </tbody>
+          </table>
+          {feedbackQuery.error ? <p className="feedback-load-error">{feedbackQuery.error}</p> : null}
+        </div>
+      </section>
+      <div className="midwife-report-export"><button className="primary" type="button" onClick={exportReport}>Export Report <Download aria-hidden="true" /></button></div>
+      {feedbackSession ? (
+        <Modal title="Session feedback" onClose={() => setFeedbackSession(null)}>
+          {selectedReviews.length ? <div className="table-wrap"><table><thead><tr><th>Reviewer</th><th>Rating</th><th>Date</th><th>Feedback</th></tr></thead><tbody>{selectedReviews.map((review) => <tr key={review.id}><td>{review.isAnonymous ? "Anonymous" : review.reviewerName}</td><td className="stars-cell">{"★".repeat(review.rating)}</td><td>{new Date(review.createdAt).toLocaleDateString()}</td><td>{review.comment || "No written feedback."}</td></tr>)}</tbody></table></div> : <p className="session-feedback-empty">No feedback is linked to this consultation session.</p>}
+        </Modal>
+      ) : null}
+    </>
   );
 }
-
+/**
+ * Admin-only review queue backed by the real midwife application endpoints.
+ * Approval is immediate; rejecting and suspending require a reason.
+ */
 function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
   const applicationsQuery = useAsyncData(getMidwifeApplications, []);
   const activeMidwivesQuery = useAsyncData(getMidwives, []);
@@ -1820,6 +1819,10 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
       />
     );
 
+  if (selectedMidwife) {
+    return <MidwifeAnalyticsView midwife={selectedMidwife} onBack={() => setSelectedMidwife(null)} />;
+  }
+
   return (
     <>
       <PageHeader
@@ -1941,12 +1944,23 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
                 <th>Contact</th>
                 <th>Location</th>
                 <th>Status</th>
-                <th>Feedback</th>
               </tr>
             </thead>
             <tbody>
               {visibleActiveMidwives.map((midwife) => (
-                <tr key={midwife.id}>
+                <tr
+                  key={midwife.id}
+                  className={midwife.midwifeProfileId ? "midwife-directory-row" : undefined}
+                  role={midwife.midwifeProfileId ? "button" : undefined}
+                  tabIndex={midwife.midwifeProfileId ? 0 : undefined}
+                  onClick={() => midwife.midwifeProfileId && setSelectedMidwife(midwife)}
+                  onKeyDown={(event) => {
+                    if (midwife.midwifeProfileId && (event.key === "Enter" || event.key === " ")) {
+                      event.preventDefault();
+                      setSelectedMidwife(midwife);
+                    }
+                  }}
+                >
                   <td>
                     <b>{midwife.name}</b>
                   </td>
@@ -1955,15 +1969,6 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
                   <td>
                     <span className="status active">ACTIVE</span>
                   </td>
-                  <td>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedMidwife(midwife)}
-                      disabled={!midwife.midwifeProfileId}
-                    >
-                      View feedback
-                    </button>
-                  </td>
                 </tr>
               ))}
               {!activeMidwivesQuery.data?.data.some(
@@ -1971,7 +1976,7 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
                   midwife.status === "APPROVED" || midwife.status === "ACTIVE",
               ) ? (
                 <tr>
-                  <td colSpan={5}>No active midwives found.</td>
+                  <td colSpan={4}>No active midwives found.</td>
                 </tr>
               ) : null}
             </tbody>
@@ -2067,12 +2072,6 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
           onConfirm={(reason) =>
             handleReview(suspendingApplication, "SUSPEND", reason)
           }
-        />
-      ) : null}
-      {selectedMidwife?.midwifeProfileId ? (
-        <MidwifeFeedbackDialog
-          midwife={selectedMidwife}
-          onClose={() => setSelectedMidwife(null)}
         />
       ) : null}
     </>
@@ -2670,7 +2669,6 @@ export default function AdminDashboard({
     <AdminProfileView onBack={() => setActive("Settings")} />
   ) : active === "Administration" ? (
     <AdministrationView
-      onAddAdmin={() => setAccountForm("admin")}
       onOpenAdministrators={() => setShowAddAdminModal(true)}
     />
   ) : (

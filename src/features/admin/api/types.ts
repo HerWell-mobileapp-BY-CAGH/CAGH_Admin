@@ -169,6 +169,8 @@ export type FeedbackSummary = {
 export type FeedbackRecord = {
   id: string;
   midwifeId: string;
+  /** Consultation/appointment UUID supplied by the backend when available. */
+  sessionId?: string;
   midwifeName: string;
   reviewerName: string;
   rating: number;
@@ -201,6 +203,7 @@ export type ConsultationReport = {
   name: string;
   subtitle: string;
   status: string;
+  reportingPeriod?: string;
   stats: Array<{ label: string; value: string | number }>;
   breakdown: Array<{ label: string; count: string | number; width: string }>;
   history: PaginatedResponse<TableRecord>;
