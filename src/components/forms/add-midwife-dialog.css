@@ -1,0 +1,232 @@
+.add-midwife-backdrop {
+  z-index: 70;
+  background: #15171580;
+  backdrop-filter: blur(3px);
+}
+
+.add-midwife-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(770px, calc(100vw - 32px));
+  max-height: min(94vh, 960px);
+  overflow: hidden;
+  border: 1px solid #e4e4e2;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 24px 70px #0003;
+}
+
+.add-midwife-dialog > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px 20px;
+  border-bottom: 1px solid #e7e6e4;
+}
+
+.add-midwife-dialog > header h2 {
+  margin: 0;
+  color: #252825;
+  font-size: 21px;
+}
+
+.add-midwife-dialog > header p {
+  margin: 5px 0 0;
+  color: #606560;
+  font-size: 13px;
+}
+
+.add-midwife-dialog > header button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #5f655f;
+  cursor: pointer;
+}
+
+.add-midwife-dialog > header button:hover { background: #f2f3f1; }
+.add-midwife-dialog > header button svg { width: 18px; height: 18px; }
+
+.add-midwife-dialog form {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.add-midwife-body {
+  overflow: auto;
+  padding: 8px 24px 24px;
+}
+
+.midwife-form-section {
+  margin-top: 20px;
+}
+
+.midwife-form-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 13px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e3e4e1;
+  color: #245725;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.midwife-form-section h3 svg {
+  width: 15px;
+  height: 15px;
+}
+
+.midwife-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 22px;
+}
+
+.midwife-form-section label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  color: #535853;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.midwife-form-section label sup { color: #c83131; }
+
+.midwife-input,
+.midwife-phone-input {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  height: 42px;
+  align-items: center;
+  border: 1px solid #dedfdd;
+  border-radius: 8px;
+  background: #fbfaf9;
+}
+
+.midwife-input:focus-within,
+.midwife-phone-input:focus-within {
+  border-color: #54824f;
+  box-shadow: 0 0 0 3px #285d2515;
+}
+
+.midwife-input > svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-left: 12px;
+  color: #646964;
+}
+
+.midwife-input input,
+.midwife-input select,
+.midwife-phone-input input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #292d29;
+  font: inherit;
+  font-size: 13px;
+}
+
+.midwife-input input,
+.midwife-input select { padding: 0 12px; }
+.midwife-input:has(> svg) input,
+.midwife-input:has(> svg) select { padding-left: 9px; }
+.midwife-input input::placeholder,
+.midwife-phone-input input::placeholder { color: #858a84; }
+
+.midwife-input > button {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: #717771;
+  cursor: pointer;
+}
+
+.midwife-input > button svg { width: 16px; height: 16px; }
+
+.midwife-phone-input { overflow: hidden; }
+.midwife-phone-input b {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  padding: 0 10px;
+  border-right: 1px solid #dedfdd;
+  background: #f0efed;
+  color: #3b403b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.midwife-phone-input input { padding: 0 10px; }
+.midwife-phone-input > svg { width: 15px; margin: 0 12px; color: #707670; }
+
+.midwife-form-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 11px 12px;
+  border: 1px solid #e4e4e2;
+  border-radius: 7px;
+  background: #f5f4f3;
+  color: #555a55;
+  font-size: 12px;
+}
+.midwife-form-note svg { width: 15px; height: 15px; color: #1976d2; }
+
+.about-midwife-section textarea {
+  min-height: 82px;
+  resize: vertical;
+  padding: 11px 12px;
+  border: 1px solid #dedfdd;
+  border-radius: 8px;
+  outline: 0;
+  background: #fbfaf9;
+  color: #292d29;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.about-midwife-section textarea:focus { border-color: #54824f; box-shadow: 0 0 0 3px #285d2515; }
+.about-midwife-section textarea::placeholder { color: #858a84; }
+.midwife-character-count { display: block; margin-top: 5px; color: #777d77; font-size: 11px; text-align: right; }
+.midwife-field-error,.midwife-form-error { color: #b22c2c; font-size: 11px; }
+.midwife-form-error { margin: 18px 0 0; font-size: 13px; }
+
+.add-midwife-dialog > form > footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 15px 24px;
+  border-top: 1px solid #e7e6e4;
+  background: #fff;
+}
+.add-midwife-dialog > form > footer button { min-width: 118px; }
+
+@media (max-width: 620px) {
+  .add-midwife-dialog > header { padding: 18px; }
+  .add-midwife-body { padding: 4px 18px 18px; }
+  .midwife-form-grid { grid-template-columns: 1fr; gap: 13px; }
+  .add-midwife-dialog > form > footer { padding: 13px 18px; }
+  .add-midwife-dialog > form > footer button { flex: 1; }
+}

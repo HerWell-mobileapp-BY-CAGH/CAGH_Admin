@@ -19,6 +19,10 @@ export interface PendingMidwife {
   name: string;
   phone: string;
   email: string;
+  hospital?: string;
+  specialty?: string;
+  languages?: string;
+  bio?: string;
   license: string;
   qualification: string;
   experience: string;
@@ -115,8 +119,12 @@ export function ReviewMidwifeRegistrationDialog({
                 <small>YEARS OF EXPERIENCE</small>
                 <b>{midwife.experience}</b>
               </p>
+              {midwife.specialty ? <p><small>SPECIALTY</small><b>{midwife.specialty}</b></p> : null}
+              {midwife.languages ? <p><small>LANGUAGES</small><b>{midwife.languages}</b></p> : null}
+              {midwife.hospital ? <p><small>HOSPITAL / WORKPLACE</small><b>{midwife.hospital}</b></p> : null}
             </div>
           </div>
+          {midwife.bio ? <div className="review-section"><h4>About the Midwife</h4><p className="review-bio">{midwife.bio}</p></div> : null}
           <div className="review-section">
             <h4>
               <FileText /> Curriculum Vitae <span>Verified format</span>

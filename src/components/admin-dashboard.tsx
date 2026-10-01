@@ -52,6 +52,7 @@ import type {
   TableRecord,
   CreateEmergencyContactPayload,
   CreateHospitalPayload,
+  CreateMidwifeAccountPayload,
   AdminLanguagePreference,
 } from "../features/admin/api/types";
 import { useAsyncData } from "../features/admin/hooks/useAsyncData";
@@ -59,6 +60,7 @@ import { useAuth } from "../features/auth/auth-context";
 import type { AdminUser } from "../features/auth/types";
 import { AdminShell } from "./layout/AdminShell";
 import { AccountFormModal } from "./forms/AccountFormModal";
+import { AddMidwifeDialog } from "./forms/AddMidwifeDialog";
 import { AccountFormPage } from "./forms/AccountFormPage";
 import {
   ReviewMidwifeRegistrationDialog,
@@ -71,6 +73,7 @@ import type { AccountFormVariant } from "./forms/account-form-config";
 import type { AccountFormValues } from "./forms/account-form-config";
 import { StatCard } from "./ui/stat-card";
 import "./midwife-analytics.css";
+import "./admin-profile.css";
 import { LearningManagement } from "./learning/LearningManagement";
 import {
   AlertTriangle,
@@ -83,7 +86,6 @@ import {
   BookOpen,
   Grid2X2,
   Hospital,
-  Inbox,
   LogOut,
   Menu,
   MoreVertical,
@@ -216,16 +218,18 @@ function Sidebar({
   );
 }
 /**
- * Global header with mobile navigation, search, inbox, notifications,
+ * Global header with mobile navigation and notifications,
  * and the signed-in administrator summary.
  */
 function Topbar({
   setOpen,
   onNotify,
+  onProfile,
   user,
 }: {
   setOpen: (v: boolean) => void;
   onNotify: () => void;
+  onProfile: () => void;
   user: AdminUser;
 }) {
   return (
@@ -237,12 +241,7 @@ function Topbar({
       >
         <Menu />
       </button>
-      <div className="global-search">
-        <Search />
-        <input placeholder="Search task, user, or record..." />
-      </div>
       <div className="top-actions">
-        <Inbox />
         <button
           className="bell"
           onClick={onNotify}
@@ -251,13 +250,18 @@ function Topbar({
           <Bell />
           <i />
         </button>
-        <div className="admin">
+        <button
+          type="button"
+          className="admin admin-profile-trigger"
+          onClick={onProfile}
+          aria-label="Open administrator profile"
+        >
           <div className="avatar">{getInitials(user.name)}</div>
           <div>
             <b>{user.name}</b>
             <small>{user.email}</small>
           </div>
-        </div>
+        </button>
       </div>
     </header>
   );
@@ -1304,7 +1308,7 @@ function SettingsView({
   );
 }
 
-function AdminProfileView({ onBack }: { onBack: () => void }) {
+function AdminProfileView({ onBack, onPassword }: { onBack: () => void; onPassword: () => void }) {
   const profileQuery = useAsyncData(getAdminProfile, []);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -1356,77 +1360,33 @@ function AdminProfileView({ onBack }: { onBack: () => void }) {
     <>
       <PageHeader
         title="My Profile"
-        subtitle="Update your administrator account information."
-        actions={
-          <button className="outline" onClick={onBack}>
-            Back to settings
-          </button>
-        }
+        subtitle="Manage your administrator account and personal information."
+        actions={<button className="outline profile-back" type="button" onClick={onBack}>← Back to Settings</button>}
       />
-      <form className="panel data-panel" onSubmit={save}>
-        <div className="modal-field">
-          <b>Username</b>
-          <input
-            className="modal-input"
-            name="username"
-            defaultValue={profile.username ?? ""}
-          />
-        </div>
-        <div className="modal-field">
-          <b>Email</b>
-          <input
-            className="modal-input"
-            type="email"
-            name="email"
-            defaultValue={profile.email ?? ""}
-          />
-        </div>
-        <div className="modal-field">
-          <b>Phone number</b>
-          <input
-            className="modal-input"
-            name="phone_number"
-            defaultValue={profile.phone_number ?? ""}
-          />
-        </div>
-        <div className="modal-field">
-          <b>First name</b>
-          <input
-            className="modal-input"
-            name="first_name"
-            defaultValue={profile.profile.first_name || profile.first_name}
-          />
-        </div>
-        <div className="modal-field">
-          <b>Last name</b>
-          <input
-            className="modal-input"
-            name="last_name"
-            defaultValue={profile.profile.last_name || profile.last_name}
-          />
-        </div>
-        <div className="modal-field">
-          <b>City</b>
-          <input
-            className="modal-input"
-            name="city"
-            defaultValue={profile.profile.city ?? ""}
-          />
-        </div>
-        <div className="modal-field">
-          <b>Region</b>
-          <input
-            className="modal-input"
-            name="region"
-            defaultValue={profile.profile.region ?? ""}
-          />
-        </div>
-        {message ? <p role="status">{message}</p> : null}
-        <div className="modal-actions">
-          <button className="primary" type="submit" disabled={saving}>
-            {saving ? "Saving..." : "Save profile"}
-          </button>
-        </div>
+      <form className="admin-profile-layout" onSubmit={save}>
+        <section className="admin-profile-card account-info-card">
+          <header><div><h2>Account Information</h2><p>Your login credentials and account details.</p></div><span className="profile-card-icon"><ShieldCheck /></span></header>
+          <label>Username<input name="username" defaultValue={profile.username ?? ""} autoComplete="username" /></label>
+          <label>Email address<input name="email" type="email" defaultValue={profile.email ?? ""} autoComplete="email" /></label>
+          <button className="change-password-link" type="button" onClick={onPassword}>Change password</button>
+        </section>
+        <section className="admin-profile-card personal-info-card">
+          <header><div><h2>Personal Information</h2><p>Manage your account's personal and contact details.</p></div><span className="profile-card-icon"><Users /></span></header>
+          <div className="profile-identity-card">
+            <div className="profile-photo-placeholder">{getInitials(`${profile.profile.first_name || profile.first_name} ${profile.profile.last_name || profile.last_name}`)}</div>
+            <div><b>{[profile.profile.first_name || profile.first_name, profile.profile.last_name || profile.last_name].filter(Boolean).join(" ") || profile.username || "Administrator"}</b><small>{profile.role.replaceAll("_", " ")}</small></div>
+          </div>
+          <div className="admin-profile-fields">
+            <label>First name<input name="first_name" defaultValue={profile.profile.first_name || profile.first_name} autoComplete="given-name" /></label>
+            <label>Last name<input name="last_name" defaultValue={profile.profile.last_name || profile.last_name} autoComplete="family-name" /></label>
+            <label className="profile-phone-field">Phone number<input name="phone_number" defaultValue={profile.phone_number ?? ""} autoComplete="tel" /></label>
+            <div className="profile-location-heading"><MapPin /> Location</div>
+            <label>City<input name="city" defaultValue={profile.profile.city ?? ""} autoComplete="address-level2" /></label>
+            <label>Region<input name="region" defaultValue={profile.profile.region ?? ""} autoComplete="address-level1" /></label>
+          </div>
+          {message ? <p className="admin-profile-message" role="status">{message}</p> : null}
+          <footer><button className="outline" type="button" onClick={onBack}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button></footer>
+        </section>
       </form>
     </>
   );
@@ -1617,7 +1577,7 @@ function MidwifeAnalyticsView({
         <div>
           <h1>{report.name || midwife.name}</h1>
           <p>{report.subtitle || midwife.location}</p>
-        </div>
+        </button>
         <div className="midwife-report-meta">
           <span className={`status ${report.status.toLowerCase()}`}>{report.status}</span>
           <small>Reporting period: {report.reportingPeriod ?? "All available dates"}</small>
@@ -1667,11 +1627,11 @@ function MidwifeAnalyticsView({
  * Admin-only review queue backed by the real midwife application endpoints.
  * Approval is immediate; rejecting and suspending require a reason.
  */
-function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
-  const applicationsQuery = useAsyncData(getMidwifeApplications, []);
-  const activeMidwivesQuery = useAsyncData(getMidwives, []);
+function MidwivesView({ onAddMidwife, refreshKey = 0 }: { onAddMidwife: () => void; refreshKey?: number }) {
+  const applicationsQuery = useAsyncData(getMidwifeApplications, [refreshKey]);
+  const activeMidwivesQuery = useAsyncData(getMidwives, [refreshKey]);
   // The admin credentials form uses real hospital UUIDs, not free text.
-  const hospitalsQuery = useAsyncData(getHospitals, []);
+  const hospitalsQuery = useAsyncData(getHospitals, [refreshKey]);
   const [applications, setApplications] = useState<MidwifeApplication[] | null>(
     null,
   );
@@ -1720,6 +1680,10 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
       name: application.user.username || application.user.email,
       phone: application.user.phone_number || "Not provided",
       email: application.user.email || "Not provided",
+      hospital: application.hospital?.name ?? "Not provided",
+      specialty: application.specialty || "Not provided",
+      languages: application.languages || "Not provided",
+      bio: application.bio || undefined,
       license: application.license_number || "Not provided",
       qualification: application.qualifications.length
         ? "Credentials submitted"
@@ -2012,7 +1976,10 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
         <ReviewMidwifeRegistrationDialog
           midwife={toPendingMidwife(reviewingApplication)}
           onClose={() => setReviewingApplication(null)}
-          onViewCv={() => setViewingCvApplication(reviewingApplication)}
+          onViewCv={() => {
+            setViewingCvApplication(reviewingApplication);
+            setReviewingApplication(null);
+          }}
           onApprove={() => {
             setViewingCvApplication(reviewingApplication);
             setReviewingApplication(null);
@@ -2033,16 +2000,26 @@ function MidwivesView({ onAddMidwife }: { onAddMidwife: () => void }) {
             experienceYears: viewingCvApplication.experience_years ?? 0,
             hospitalId: viewingCvApplication.hospital?.id ?? "",
             cvUrl: viewingCvApplication.cv_file_url,
+            specialty: viewingCvApplication.specialty ?? "",
+            languages: viewingCvApplication.languages ?? "",
           }}
-          onClose={() => setViewingCvApplication(null)}
+          onClose={() => {
+            setViewingCvApplication(null);
+            setReviewingApplication(null);
+          }}
+          onBack={() => {
+            setReviewingApplication(viewingCvApplication);
+            setViewingCvApplication(null);
+          }}
           onSaveInformation={async (payload) => {
             // Save verified profile details without changing the pending status.
-            await updateMidwifeApplication(viewingCvApplication.id, payload);
-            setApplications((current) => current?.map((application) =>
+            const savedApplication = await updateMidwifeApplication(viewingCvApplication.id, payload);
+            setApplications((current) => (current ?? applicationsQuery.data?.data ?? []).map((application) =>
               application.id === viewingCvApplication.id
-                ? { ...application, ...payload, hospital: hospitalsQuery.data?.data.find((hospital) => hospital.id === payload.hospital_id) ?? application.hospital }
+                ? savedApplication
                 : application,
-            ) ?? null);
+            ));
+            setViewingCvApplication(savedApplication);
           }}
           onApprove={(payload) =>
             saveCredentialsAndApprove(viewingCvApplication, payload)
@@ -2581,6 +2558,7 @@ export default function AdminDashboard({
     null,
   );
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [showAddMidwifeModal, setShowAddMidwifeModal] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [contactsVersion, setContactsVersion] = useState(0);
   const [hospitalsVersion, setHospitalsVersion] = useState(0);
@@ -2590,6 +2568,7 @@ export default function AdminDashboard({
     setActive(nextActive);
     setAccountForm(null);
     setShowAddAdminModal(false);
+    setShowAddMidwifeModal(false);
     setModal(null);
     setNotice(false);
     setShowPasswordChange(false);
@@ -2611,6 +2590,11 @@ export default function AdminDashboard({
       setActive("Administration");
     }
     setAccountForm(null);
+  }
+
+  async function submitMidwifeAccount(payload: CreateMidwifeAccountPayload) {
+    await createMidwifeAccount(payload);
+    setMidwivesVersion((version) => version + 1);
   }
 
   async function saveEmergencyContact(payload: CreateEmergencyContactPayload) {
@@ -2639,7 +2623,7 @@ export default function AdminDashboard({
   ) : active === "Dashboard" ? (
     <Dashboard navigateTo={navigateTo} />
   ) : active === "Midwives" ? (
-    <MidwivesView onAddMidwife={() => setAccountForm("midwife")} />
+    <MidwivesView onAddMidwife={() => setShowAddMidwifeModal(true)} refreshKey={midwivesVersion} />
   ) : active === "Health" ? (
     <HealthView onAddContent={() => setModal("content")} />
   ) : active === "Learning" ? (
@@ -2666,7 +2650,7 @@ export default function AdminDashboard({
       user={user}
     />
   ) : active === "Profile" ? (
-    <AdminProfileView onBack={() => setActive("Settings")} />
+    <AdminProfileView onBack={() => setActive("Settings")} onPassword={() => setShowPasswordChange(true)} />
   ) : active === "Administration" ? (
     <AdministrationView
       onOpenAdministrators={() => setShowAddAdminModal(true)}
@@ -2685,7 +2669,7 @@ export default function AdminDashboard({
         active === "Users"
           ? () => setAccountForm("user")
           : active === "Midwives"
-            ? () => setAccountForm("midwife")
+            ? () => setShowAddMidwifeModal(true)
             : active === "Hospitals"
               ? () => setModal("hospital")
               : undefined
@@ -2709,6 +2693,7 @@ export default function AdminDashboard({
           <Topbar
             setOpen={setOpen}
             onNotify={() => setNotice(true)}
+            onProfile={() => setActive("Profile")}
             user={user}
           />
         }
@@ -2725,6 +2710,12 @@ export default function AdminDashboard({
           }}
         />
       )}
+      {showAddMidwifeModal ? (
+        <AddMidwifeDialog
+          onClose={() => setShowAddMidwifeModal(false)}
+          onSubmit={submitMidwifeAccount}
+        />
+      ) : null}
       {showPasswordChange ? (
         <PasswordChangeDialog onClose={() => setShowPasswordChange(false)} />
       ) : null}

@@ -6,6 +6,27 @@
   background: #f5f8f4;
 }
 
+.admin-profile-trigger {
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-profile-trigger:hover b,
+.admin-profile-trigger:focus-visible b {
+  color: var(--primary);
+}
+
+.admin-profile-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+
 .midwife-analytics-back {
   display: block;
   margin: 0 0 24px;

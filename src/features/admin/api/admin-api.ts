@@ -9,6 +9,7 @@ import type {
   ConsultationStats,
   CreateAccountPayload,
   CreateAccountResponse,
+  CreateMidwifeAccountPayload,
   CreateEmergencyContactPayload,
   CreateHospitalPayload,
   DirectoryRecord,
@@ -597,10 +598,26 @@ export function createUserAccount(payload: CreateAccountPayload) {
   );
 }
 
-export function createMidwifeAccount(payload: CreateAccountPayload) {
+export function createMidwifeAccount(payload: CreateMidwifeAccountPayload | CreateAccountPayload) {
+  const details = "fullName" in payload ? payload : null;
+  const nameParts = details?.fullName.trim().split(/\s+/) ?? [];
+  const firstName = nameParts.shift() ?? "";
+  const lastName = nameParts.join(" ");
   return post<CreateAccountResponse>(
     adminEndpoints.users,
-    toAccountPayload(payload, "MIDWIFE"),
+    {
+      ...toAccountPayload(payload, "MIDWIFE"),
+      ...(details ? {
+        first_name: firstName,
+        last_name: lastName,
+        phone_number: details.phoneNumber,
+        ...(details.licenseNumber ? { license_number: details.licenseNumber } : {}),
+        ...(details.specialty ? { specialty: details.specialty } : {}),
+        experience_years: details.experienceYears,
+        ...(details.hospitalId ? { hospital_id: details.hospitalId } : {}),
+        ...(details.bio ? { bio: details.bio } : {}),
+      } : {}),
+    },
     "Unable to create midwife account.",
   );
 }

@@ -3,6 +3,16 @@ export type CreateAccountPayload = {
   password: string;
 };
 
+export type CreateMidwifeAccountPayload = CreateAccountPayload & {
+  fullName: string;
+  phoneNumber: string;
+  licenseNumber: string;
+  specialty: string;
+  experienceYears: number;
+  hospitalId: string;
+  bio: string;
+};
+
 export type CreateAccountResponse = {
   id: string;
   message?: string;
