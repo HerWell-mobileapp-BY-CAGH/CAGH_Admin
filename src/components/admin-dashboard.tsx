@@ -1577,7 +1577,7 @@ function MidwifeAnalyticsView({
         <div>
           <h1>{report.name || midwife.name}</h1>
           <p>{report.subtitle || midwife.location}</p>
-        </button>
+        </div>
         <div className="midwife-report-meta">
           <span className={`status ${report.status.toLowerCase()}`}>{report.status}</span>
           <small>Reporting period: {report.reportingPeriod ?? "All available dates"}</small>
